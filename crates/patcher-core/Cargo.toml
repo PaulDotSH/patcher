@@ -1,0 +1,19 @@
+[package]
+name = "patcher-core"
+description = "Patch format, decoders and the apply/revert engine (pure Rust, used by the stub)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bitcode.workspace = true
+blake3.workspace = true
+lzma-rust2.workspace = true
+memmap2.workspace = true
+rayon.workspace = true
+ruzstd.workspace = true
+thiserror.workspace = true
+xxhash-rust.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_SystemInformation"] }

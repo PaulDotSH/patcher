@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test --release --workspace
+      - name: Linux stub (static musl)
+        run: cargo build --release -p patcher-stub --target x86_64-unknown-linux-musl
+      - name: Dist
+        run: cargo xtask dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patcher-${{ matrix.os }}
+          path: dist/

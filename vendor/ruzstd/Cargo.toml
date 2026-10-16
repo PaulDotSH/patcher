@@ -1,0 +1,23 @@
+# Vendored copy of ruzstd 0.9.1 (MIT, https://github.com/KillingSpark/zstd-rs).
+# Local change: FrameDecoder::set_raw_prefix, for zstd --patch-from / refPrefix frames.
+[package]
+name = "ruzstd"
+version = "0.9.1"
+edition = "2018"
+license = "MIT"
+publish = false
+
+[dependencies]
+twox-hash = { version = "2.0", default-features = false, features = ["xxhash64"], optional = true }
+
+[features]
+default = ["std"]
+hash = ["dep:twox-hash"]
+std = []
+# Declared only so the vendored sources compile without cfg warnings.
+dict_builder = []
+fuzz_exports = []
+
+[lints.rust]
+unexpected_cfgs = "allow"
+warnings = "allow"

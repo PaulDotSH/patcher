@@ -1,0 +1,8 @@
+# Example metadata file for `patcher create --config patch.example.toml`.
+name = "My Mod"
+version = "1.0"
+author = "you"
+description = "Adds things."
+url = "https://example.com/mymod"
+exclude = ["saves/", "*.bak"]
+profile = "balanced"   # fast | balanced | max

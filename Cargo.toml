@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/PaulDotSH/patcher"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.release.package.patcher-stub]
+opt-level = 3
+
+[patch.crates-io]
+ruzstd = { path = "vendor/ruzstd" }
+
+[workspace.dependencies]
+patcher-core = { path = "crates/patcher-core" }
+patcher-create = { path = "crates/patcher-create" }
+patcher-testgen = { path = "crates/patcher-testgen" }
+bitcode = "0.6"
+blake3 = { version = "1.8", features = ["pure", "rayon"] }
+lzma-rust2 = { version = "0.22", default-features = false, features = ["std"] }
+memmap2 = "0.9"
+rayon = "1.11"
+ruzstd = { version = "0.9", default-features = false, features = ["std"] }
+thiserror = "2"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }

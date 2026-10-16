@@ -1,0 +1,22 @@
+[package]
+name = "patcher-create"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1.0.104"
+bitcode.workspace = true
+blake3.workspace = true
+divsufsort = "2.0.0"
+ignore = "0.4.33"
+lzma-rust2 = { workspace = true, default-features = false, features = ["std", "encoder", "optimization"] }
+memmap2.workspace = true
+patcher-core.workspace = true
+rayon.workspace = true
+walkdir = "2.5.0"
+xxhash-rust.workspace = true
+zstd = { version = "0.14.2", features = ["zstdmt"] }
+
+[dev-dependencies]
+patcher-testgen = { path = "../patcher-testgen" }
