@@ -210,11 +210,12 @@ fn standalone_patcher_carries_the_patch() {
     patcher_create::create(&opts(&c.base, &sc.modded, Preset::Fast, true), &patch_path, &Silent).unwrap();
     let exe = root.join("standalone.exe");
     let fake_stub = b"MZ fake stub with some bytes PTCHDB inside".repeat(1000);
-    patcher_create::write_standalone(&fake_stub, &patch_path, &exe).unwrap();
+    patcher_create::write_standalone(&fake_stub, None, Some(&patch_path), &exe).unwrap();
 
     let bytes = std::fs::read(&exe).unwrap();
     let f = Footer::find(&bytes).unwrap();
-    assert_eq!(f.patch_offset, fake_stub.len() as u64);
+    assert_eq!(f.patch.unwrap().offset, fake_stub.len() as u64);
+    assert_eq!(f.ui, None);
     let embedded = Patch::open_embedded(&exe).unwrap().expect("embedded patch");
     let plain = Patch::open(&patch_path).unwrap();
     assert_eq!(embedded.index, plain.index);
@@ -224,6 +225,30 @@ fn standalone_patcher_carries_the_patch() {
     let game = fresh_game("standalone");
     patcher_core::apply(&embedded, &game, &ApplyOptions { backup: true, progress: &Silent, cancel: None }).unwrap();
     assert_eq!(tree_listing(&game).unwrap(), tree_listing(&sc.modded).unwrap());
+}
+
+#[test]
+fn ui_bundle_and_detached_patchers() {
+    let (root, c) = corpus();
+    let sc = &c.scenarios[1];
+    let patch_path = root.join("with-ui.patch");
+    patcher_create::create(&opts(&c.base, &sc.modded, Preset::Fast, false), &patch_path, &Silent).unwrap();
+    let stub = b"MZ fake stub".repeat(100);
+    let ui = b"fake ui bundle".repeat(50);
+
+    let exe = root.join("with-ui.exe");
+    patcher_create::write_standalone(&stub, Some(&ui), Some(&patch_path), &exe).unwrap();
+    let bytes = std::fs::read(&exe).unwrap();
+    assert_eq!(Footer::ui_bytes(&bytes), Some(&ui[..]));
+    let embedded = Patch::open_embedded(&exe).unwrap().expect("embedded patch");
+    assert_eq!(embedded.bytes(), Patch::open(&patch_path).unwrap().bytes());
+
+    let detached = root.join("detached.exe");
+    patcher_create::write_standalone(&stub, Some(&ui), None, &detached).unwrap();
+    let bytes = std::fs::read(&detached).unwrap();
+    assert_eq!(Footer::ui_bytes(&bytes), Some(&ui[..]));
+    assert!(Patch::open_embedded(&detached).unwrap().is_none());
+    assert!(matches!(Patch::open(&detached), Err(Error::NotAPatch)));
 }
 
 #[test]

@@ -51,7 +51,7 @@ impl Patch {
         let f = File::open(exe).at(exe)?;
         // SAFETY: as in `open`.
         let map = unsafe { Mmap::map(&f) }.at(exe)?;
-        if Footer::find(&map).is_none() {
+        if Footer::find(&map).and_then(|f| f.patch).is_none() {
             return Ok(None);
         }
         Patch::from_backing(Backing::Map(map), false).map(Some)
@@ -65,8 +65,8 @@ impl Patch {
         let data = backing.bytes();
         let (start, len) = if allow_plain && data.starts_with(&MAGIC) {
             (0, data.len())
-        } else if let Some(f) = Footer::find(data) {
-            (f.patch_offset as usize, f.patch_len as usize)
+        } else if let Some(r) = Footer::find(data).and_then(|f| f.patch) {
+            (r.offset as usize, r.len as usize)
         } else {
             return Err(Error::NotAPatch);
         };

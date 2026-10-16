@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use patcher_core::format::{
-    BaseFile, BaseSlice, Blob, Check, Comp, Footer, Header, Index, Meta, Segment, SolidGroup, Source,
+    BaseFile, BaseSlice, Blob, Check, Comp, Footer, Header, Index, Meta, Range, Segment, SolidGroup, Source,
     WriteOp, FORMAT_VERSION, HEADER_LEN,
 };
 use patcher_core::hash::{self, Mapped};
@@ -576,13 +576,21 @@ fn encode_solid(data: &[u8], prof: &Profile, budget: &Budget) -> (Encoded, Vec<(
     (pick(cands, prof.tolerance), tried)
 }
 
-/// Writes `stub ++ patch ++ footer` to `out` (a self-contained patcher).
-pub fn write_standalone(stub: &[u8], patch: &Path, out: &Path) -> Result<()> {
-    let patch_bytes = std::fs::read(patch).with_context(|| format!("reading {}", patch.display()))?;
+/// Writes `stub ++ [ui] ++ [patch] ++ footer` to `out`: a self-contained patcher, or with
+/// no patch one that reads the `.patch` file next to it.
+pub fn write_standalone(stub: &[u8], ui: Option<&[u8]>, patch: Option<&Path>, out: &Path) -> Result<()> {
+    let patch_bytes = match patch {
+        Some(p) => std::fs::read(p).with_context(|| format!("reading {}", p.display()))?,
+        None => Vec::new(),
+    };
+    let ui = ui.unwrap_or_default();
+    let range = |offset: usize, len: usize| (len > 0).then_some(Range { offset: offset as u64, len: len as u64 });
+    let footer = Footer { ui: range(stub.len(), ui.len()), patch: range(stub.len() + ui.len(), patch_bytes.len()) };
     let mut f = BufWriter::new(File::create(out).with_context(|| format!("creating {}", out.display()))?);
     f.write_all(stub)?;
+    f.write_all(ui)?;
     f.write_all(&patch_bytes)?;
-    f.write_all(&Footer { patch_offset: stub.len() as u64, patch_len: patch_bytes.len() as u64 }.to_bytes())?;
+    f.write_all(&footer.to_bytes())?;
     f.flush()?;
     drop(f);
     #[cfg(unix)]

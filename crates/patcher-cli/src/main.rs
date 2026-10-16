@@ -274,7 +274,7 @@ fn create(a: CreateArgs) -> Result<()> {
             });
             match find_stub(t, a.stub_dir.as_deref()) {
                 Some(stub) => {
-                    patcher_create::write_standalone(&stub, &patch_path, &out)?;
+                    patcher_create::write_standalone(&stub, None, Some(&patch_path), &out)?;
                     println!("Wrote {} ({})", out.display(), human_bytes(std::fs::metadata(&out)?.len()));
                 }
                 None => eprintln!(

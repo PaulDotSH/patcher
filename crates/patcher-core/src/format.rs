@@ -10,7 +10,8 @@
 //! +--------------------+
 //! ```
 //!
-//! A standalone patcher is `stub executable ++ patch ++ Footer (24 bytes)`.
+//! A standalone patcher is `stub executable ++ [UI bundle] ++ [patch] ++ Footer (40 bytes)`.
+//! Older patchers end in a 24-byte v1 footer that only locates a patch; it is still read.
 
 use bitcode::{Decode, Encode};
 
@@ -19,8 +20,10 @@ use crate::{Error, Result};
 pub const MAGIC: [u8; 8] = *b"PTCHDB\0\x01";
 pub const FORMAT_VERSION: u32 = 1;
 pub const HEADER_LEN: usize = 48;
-pub const FOOTER_MAGIC: [u8; 8] = *b"PTCHEND1";
-pub const FOOTER_LEN: usize = 24;
+pub const FOOTER_MAGIC: [u8; 8] = *b"PTCHEND2";
+pub const FOOTER_LEN: usize = 40;
+pub const FOOTER_V1_MAGIC: [u8; 8] = *b"PTCHEND1";
+pub const FOOTER_V1_LEN: usize = 24;
 
 /// Fixed-size header at the start of every patch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,34 +70,76 @@ impl Header {
     }
 }
 
-/// Trailer appended after a patch embedded in a stub executable.
+/// A byte range inside a stub executable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Range {
+    pub offset: u64,
+    pub len: u64,
+}
+
+impl Range {
+    fn end(&self) -> Option<u64> {
+        self.offset.checked_add(self.len)
+    }
+}
+
+/// Trailer of a stub executable: where its UI bundle and its patch are, if it has them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Footer {
-    pub patch_offset: u64,
-    pub patch_len: u64,
+    pub ui: Option<Range>,
+    pub patch: Option<Range>,
 }
 
 impl Footer {
     pub fn to_bytes(&self) -> [u8; FOOTER_LEN] {
         let mut b = [0u8; FOOTER_LEN];
-        b[0..8].copy_from_slice(&self.patch_offset.to_le_bytes());
-        b[8..16].copy_from_slice(&self.patch_len.to_le_bytes());
-        b[16..24].copy_from_slice(&FOOTER_MAGIC);
+        for (i, r) in [self.ui, self.patch].into_iter().enumerate() {
+            let r = r.unwrap_or(Range { offset: 0, len: 0 });
+            b[i * 16..i * 16 + 8].copy_from_slice(&r.offset.to_le_bytes());
+            b[i * 16 + 8..i * 16 + 16].copy_from_slice(&r.len.to_le_bytes());
+        }
+        b[32..40].copy_from_slice(&FOOTER_MAGIC);
         b
     }
 
-    /// Looks for a footer at the end of `file`.
+    /// Looks for a v2 or v1 footer at the end of `file`. Ranges must lie before the footer
+    /// and must not overlap.
     pub fn find(file: &[u8]) -> Option<Footer> {
-        let tail = file.get(file.len().checked_sub(FOOTER_LEN)?..)?;
-        if tail[16..24] != FOOTER_MAGIC {
+        let u64_at = |b: &[u8], at: usize| u64::from_le_bytes(b[at..at + 8].try_into().unwrap());
+        let range = |b: &[u8], at: usize| {
+            let r = Range { offset: u64_at(b, at), len: u64_at(b, at + 8) };
+            (r.len > 0).then_some(r)
+        };
+        let (f, body) = if let Some(tail) = file.get(file.len().checked_sub(FOOTER_LEN)?..)
+            && tail[32..40] == FOOTER_MAGIC
+        {
+            (Footer { ui: range(tail, 0), patch: range(tail, 16) }, file.len() - FOOTER_LEN)
+        } else {
+            let tail = file.get(file.len().checked_sub(FOOTER_V1_LEN)?..)?;
+            if tail[16..24] != FOOTER_V1_MAGIC {
+                return None;
+            }
+            let patch = Range { offset: u64_at(tail, 0), len: u64_at(tail, 8) };
+            (Footer { ui: None, patch: Some(patch) }, file.len() - FOOTER_V1_LEN)
+        };
+        for r in [f.ui, f.patch].into_iter().flatten() {
+            if r.end()? > body as u64 {
+                return None;
+            }
+        }
+        if let (Some(a), Some(b)) = (f.ui, f.patch)
+            && a.offset < b.end()?
+            && b.offset < a.end()?
+        {
             return None;
         }
-        let f = Footer {
-            patch_offset: u64::from_le_bytes(tail[0..8].try_into().unwrap()),
-            patch_len: u64::from_le_bytes(tail[8..16].try_into().unwrap()),
-        };
-        let end = f.patch_offset.checked_add(f.patch_len)?;
-        (end <= (file.len() - FOOTER_LEN) as u64).then_some(f)
+        Some(f)
+    }
+
+    /// The UI bundle of a stub executable, if it carries one.
+    pub fn ui_bytes(file: &[u8]) -> Option<&[u8]> {
+        let r = Footer::find(file)?.ui?;
+        file.get(r.offset as usize..r.end()? as usize)
     }
 }
 
@@ -309,15 +354,44 @@ mod tests {
         assert_eq!(Header::parse(&h.to_bytes()).unwrap(), h);
     }
 
+    fn with_footer(f: Footer) -> Vec<u8> {
+        let mut file = vec![7u8; 100];
+        file.extend_from_slice(&f.to_bytes());
+        file
+    }
+
     #[test]
     fn footer_found_only_when_valid() {
-        let mut file = vec![7u8; 100];
-        file.extend_from_slice(&Footer { patch_offset: 10, patch_len: 90 }.to_bytes());
-        assert_eq!(Footer::find(&file), Some(Footer { patch_offset: 10, patch_len: 90 }));
-        let mut bad = vec![7u8; 100];
-        bad.extend_from_slice(&Footer { patch_offset: 10, patch_len: 91 }.to_bytes());
-        assert_eq!(Footer::find(&bad), None);
+        let r = |offset, len| Some(Range { offset, len });
+        for f in [
+            Footer { ui: None, patch: r(10, 90) },
+            Footer { ui: r(10, 20), patch: r(30, 70) },
+            Footer { ui: r(10, 90), patch: None },
+        ] {
+            assert_eq!(Footer::find(&with_footer(f)), Some(f), "{f:?}");
+        }
+        let bad = [
+            ("past the end", Footer { ui: None, patch: r(10, 91) }),
+            ("overlap", Footer { ui: r(10, 21), patch: r(30, 70) }),
+            ("overflow", Footer { ui: r(u64::MAX, 2), patch: None }),
+        ];
+        for (what, f) in bad {
+            assert_eq!(Footer::find(&with_footer(f)), None, "{what}");
+        }
         assert_eq!(Footer::find(&[1, 2, 3]), None);
+        let file = with_footer(Footer { ui: r(10, 20), patch: None });
+        assert_eq!(Footer::ui_bytes(&file), Some(&file[10..30]));
+    }
+
+    #[test]
+    fn v1_footer_still_read() {
+        let mut file = vec![7u8; 100];
+        file.extend_from_slice(&10u64.to_le_bytes());
+        file.extend_from_slice(&90u64.to_le_bytes());
+        file.extend_from_slice(&FOOTER_V1_MAGIC);
+        assert_eq!(Footer::find(&file), Some(Footer { ui: None, patch: Some(Range { offset: 10, len: 90 }) }));
+        file[108] = 91;
+        assert_eq!(Footer::find(&file), None);
     }
 
     #[test]
