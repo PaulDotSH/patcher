@@ -109,6 +109,7 @@ export component Button inherits Rectangle {
     property <bool> down: touch.pressed && root.enabled;
     property <length> lift: Theme.shadows ? 4px : 0px;
     min-width: max(108px, label.preferred-width + 40px);
+    horizontal-stretch: 0;
     height: 40px;
 
     if Theme.shadows && root.enabled: Rectangle {
@@ -299,6 +300,7 @@ export component ProgressBar inherits Rectangle {
         visible: root.value > 0;
     }
     fill := Rectangle {
+        x: 0;
         width: max(root.height, root.width * clamp(root.value, 0, 1));
         visible: root.value > 0;
         border-radius: root.height / 2;

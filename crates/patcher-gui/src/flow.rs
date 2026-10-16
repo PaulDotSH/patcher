@@ -267,6 +267,8 @@ impl Flow {
         }
     }
 
+    // Named after the `Patcher.next` callback it handles.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Vec<Effect> {
         if !self.state.can_next {
             return vec![];

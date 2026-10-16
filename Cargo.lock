@@ -87,6 +87,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "annotate-snippets"
+version = "0.12.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f211a51805bc641f3ad5b7664c77d2547af685cc33b4cd8d31964027a46f13f1"
+dependencies = [
+ "anstyle",
+ "memchr",
+ "unicode-width",
+]
+
+[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1778,6 +1789,7 @@ version = "1.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f55d48ebef05e2bf09ba5a1fc67bcb11033b9e12a2a50ed3105c7d25e2b539d0"
 dependencies = [
+ "annotate-snippets",
  "by_address",
  "data-url",
  "derive_more",
@@ -1789,6 +1801,8 @@ dependencies = [
  "lyon_extra",
  "lyon_path",
  "num_enum",
+ "proc-macro2",
+ "quote",
  "rowan",
  "smol_str 0.3.6",
  "strum",
@@ -3239,7 +3253,9 @@ version = "0.1.0"
 dependencies = [
  "bitcode",
  "patcher-core",
+ "png",
  "serde",
+ "slint",
  "slint-interpreter",
  "spin_on",
  "thiserror 2.0.21",
@@ -3947,6 +3963,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "slint"
+version = "1.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15e477d5ff6fec20909100ff8f7062432ebfbda7a62a0f37d0252aa126f38c83"
+dependencies = [
+ "const-field-offset",
+ "i-slint-backend-linuxkms",
+ "i-slint-backend-selector",
+ "i-slint-backend-winit",
+ "i-slint-common",
+ "i-slint-core",
+ "i-slint-core-macros",
+ "i-slint-renderer-software",
+ "num-traits",
+ "once_cell",
+ "pin-weak",
+ "slint-macros",
+ "unicode-segmentation",
+ "vtable",
+]
+
+[[package]]
 name = "slint-interpreter"
 version = "1.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3967,6 +4005,18 @@ dependencies = [
  "unicode-segmentation",
  "vtable",
  "web-sys",
+]
+
+[[package]]
+name = "slint-macros"
+version = "1.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35e74b13d20884dc480ce37d0fabbf02cb4bc0df2a595434feac96ca7c2a0f15"
+dependencies = [
+ "i-slint-compiler",
+ "proc-macro2",
+ "quote",
+ "spin_on",
 ]
 
 [[package]]

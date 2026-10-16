@@ -85,6 +85,8 @@ pub struct Look {
     pub background: Background,
     pub background_image: Option<String>,
     pub shadows: bool,
+    /// Uppercase the wordmark, headings and buttons (the display font's strings).
+    pub uppercase: bool,
     pub colors: BTreeMap<String, String>,
     pub fonts: Fonts,
 }
@@ -100,6 +102,7 @@ impl Default for Look {
             background: Background::Glow,
             background_image: None,
             shadows: true,
+            uppercase: true,
             colors: BTreeMap::new(),
             fonts: Fonts::default(),
         }

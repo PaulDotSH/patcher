@@ -11,6 +11,8 @@ pub mod compile;
 pub mod expand;
 pub mod flow;
 pub mod strings;
+pub mod snapshot;
 pub mod theme;
+pub mod view;
 
 pub use theme::{Theme, ThemeError};
