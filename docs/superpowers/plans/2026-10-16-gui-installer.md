@@ -37,7 +37,7 @@ evidence.
    If it fails, try `pelite` + a hand-written `.rsrc` rebuild, judge the effort, and
    report.
 3. **Size.** Release build of a minimal interpreter + winit + software-renderer binary
-   with `opt-level = "s"`, `lto = "fat"`, `panic = "abort"`, `strip`. Record the size.
+   with `opt-level = "z"`, `lto = "fat"`, `panic = "abort"`, `strip`. Record the size.
 4. **winit access.** Through `slint::winit_030::WinitWindowAccessor` on 1.18.1: call
    `drag_window()` from a `TouchArea` pointer-down, and receive `Focused` / `Occluded`
    window events. Pass: a frameless window drags, and focus changes are logged.
@@ -245,7 +245,7 @@ Commit: `GUI: relaunch as administrator for protected game folders`.
 ## Task 11: `patcher-stub-gui`
 
 Files: new `crates/patcher-stub-gui/` (`Cargo.toml`, `src/main.rs`), workspace profile
-entry `opt-level = "s"`.
+entry `opt-level = "z"`.
 
 1. `#![windows_subsystem = "windows"]`.
 2. Mode selection per the spec. Headless mode: `AttachConsole(ATTACH_PARENT_PROCESS)` on
@@ -302,7 +302,8 @@ Commit: `CLI: GUI patchers with themes, detached mode and stub fallback`.
 
 Files: `crates/patcher-cli/src/preview.rs`, `crates/patcher-gui/src/sim.rs`.
 
-1. `sim.rs`: a simulated `Backend` (fake meta, an always-valid folder, an 8 s scripted
+1. `sim.rs`: a simulated `Backend` (fake meta named "patcher", so screenshots show a
+   PATCHER wordmark; an always-valid folder, an 8 s scripted
    run with fake file names, and `--fail`).
 2. Verify-only real backend: `apply` calls `inspect`, then reports "preview: nothing was
    written".

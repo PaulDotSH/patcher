@@ -117,8 +117,8 @@ icon = "icon.png"           # window icon; also the Windows exe icon
 [theme]
 base = "dark"               # dark | light
 accent = "#c6ff3d"
-wordmark = "Trap Foarte Top" # default: patch name
-tag = "Top"                 # word drawn in the tilted tag; default last word; "" disables
+wordmark = "My Mod"         # default: patch name
+tag = "Mod"                 # word drawn in the tilted tag; default last word; "" disables
 logo = "logo.png"           # replaces the wordmark when set
 background = "glow"         # glow | grid | image | none
 background_image = "bg.png" # used with background = "image"
@@ -427,7 +427,8 @@ The `stubs` module gains `STUB_WINDOWS_GUI` and `STUB_LINUX_GUI`, from
 patcher gui-preview [--gui theme.toml] [--patch FILE] [--game DIR] [--fail] [--screenshot DIR]
 ```
 
-- Without `--patch`, a simulated backend: a fake mod, a game folder that always
+- Without `--patch`, a simulated backend: a fake mod named "patcher" (so the default
+  wordmark reads PATCHER, never trap.foarte.top text), a game folder that always
   validates, and an 8-second scripted progress run. `--fail` makes the run end on the
   error screen instead.
 - With `--patch`, the real backend restricted to `inspect`: start runs verify only and
@@ -451,7 +452,7 @@ patcher gui-preview [--gui theme.toml] [--patch FILE] [--game DIR] [--fail] [--s
 
 A missing target or toolchain prints the existing style of warning and is skipped. The
 release profile keeps `opt-level = 3` for `patcher-stub`. `patcher-stub-gui` uses
-`opt-level = "s"`; its size is measured in the spike and reported in BENCHMARKS.md, with
+`opt-level = "z"`; its size is measured in the spike and reported in BENCHMARKS.md, with
 no cap.
 
 ## Licensing
@@ -513,7 +514,28 @@ design changes.
    and resolves `@patcher` / `@parts` library paths.
 2. A pure-Rust crate (first candidate `editpe`) rewrites icon and version-info resources
    of the msvc and gnu stubs, and the result still runs.
-3. GUI stub size (Windows msvc, release, `opt-level = "s"`): measured and reported.
+3. GUI stub size (Windows msvc, release, `opt-level = "z"`): measured and reported.
 4. winit `drag_window` and focus / minimise events are reachable through Slint's winit
    accessor on the pinned Slint version.
 5. Off-screen screenshots of a compiled interpreter component with the software renderer.
+
+## Spike results (2026-10-17)
+
+| # | result |
+|---|---|
+| 1 | Pass. `import "fonts/x.ttf";` from an extracted folder works with the interpreter, as do `set_library_paths`, `set_global_property` and a Rust-driven `tick`. |
+| 2 | Pass for msvc stubs. `editpe` 0.2.4 sets the icon (from a `DynamicImage`, resized to every size) and the version info, and the stub still runs. Non-square images are stretched, so the creator pads them to a square first. gnu stubs untested. |
+| 3 | 12.0 MB at `opt-level = "s"`, 10.9 MB at `"z"`; `patcher-stub-gui` uses `"z"`. |
+| 4 | Pass. `WinitWindowAccessor::with_winit_window(|w| w.drag_window())` drags a frameless window. `on_winit_window_event` delivers `Focused`, and minimising arrives as `Resized` with `is_minimized() == Some(true)`. |
+| 5 | Pass. `slint::platform::set_platform` with a `MinimalSoftwareWindow` plus `Window::take_snapshot` renders PNGs with no window system. Set the platform before compiling. |
+
+**Software renderer limits** (accepted by the user): `transform-rotation` is ignored on
+rectangles, text and images, and `drop-shadow-*` is not drawn. The default theme works
+around them:
+
+- the tilted tag is a tilted `Path` parallelogram with upright text, plus a second black
+  path as its hard shadow;
+- hard offset shadows are a black rectangle drawn behind the element;
+- glows are translucent stacked rectangles or a `@radial-gradient`.
+
+`docs/gui.md` tells authors that rotation and drop shadows do not render.
