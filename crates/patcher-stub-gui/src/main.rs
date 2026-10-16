@@ -87,7 +87,7 @@ fn gui(args: &[OsString]) -> Result<(), String> {
             None => Theme::builtin(),
         }
     };
-    let r = app::run(RunOptions { theme, backend: Arc::new(PatchBackend(patch)), start, work: temp.join("ui") });
+    let r = app::run(RunOptions { theme, backend: Arc::new(PatchBackend(patch)), start, work: temp.join("ui"), watch: None });
     let _ = std::fs::remove_dir_all(&temp);
     r
 }

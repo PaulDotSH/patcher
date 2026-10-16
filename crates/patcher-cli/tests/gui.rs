@@ -35,7 +35,7 @@ fn setup(tag: &str, names: &[&str], theme: &[(&str, &str)]) -> PathBuf {
 }
 
 fn create(r: &Path, extra: &[&str]) -> std::process::Output {
-    let out = Command::new(env!("CARGO_BIN_EXE_patcher"))
+    Command::new(env!("CARGO_BIN_EXE_patcher"))
         .args(["create", "--name", "Test Mod", "--mod-version", "1.0", "--profile", "fast"])
         .arg("--base")
         .arg(r.join("base"))
@@ -47,8 +47,7 @@ fn create(r: &Path, extra: &[&str]) -> std::process::Output {
         .arg(r.join("stubs"))
         .args(extra)
         .output()
-        .unwrap();
-    out
+        .unwrap()
 }
 
 fn stderr(o: &std::process::Output) -> String {

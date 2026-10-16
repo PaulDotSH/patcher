@@ -133,6 +133,7 @@ export {{ Patcher, Theme, Strings }}
 
 export component Root inherits Window {{
     in property <string> window-title;
+    in property <string> preview-error;
     title: root.window-title;
     no-frame: true;
     width: {w}px;
@@ -148,6 +149,19 @@ export component Root inherits Window {{
     Credit {{
         width: 100%;
         height: 100%;
+    }}
+    if root.preview-error != "": Rectangle {{
+        background: #000000e8;
+        Text {{
+            x: 20px;
+            y: 20px;
+            width: parent.width - 40px;
+            text: root.preview-error;
+            color: #ff5b4f;
+            font-family: "JetBrains Mono";
+            font-size: 12px;
+            wrap: word-wrap;
+        }}
     }}
 }}
 "#,

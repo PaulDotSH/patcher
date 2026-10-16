@@ -224,6 +224,12 @@ impl Flow {
         (f, effects)
     }
 
+    /// New strings (a theme reloaded in `gui-preview`).
+    pub fn set_strings(&mut self, strings: HashMap<String, String>) {
+        self.config.strings = strings;
+        self.refresh();
+    }
+
     fn s(&self, key: &str) -> String {
         text(&self.config, key)
     }

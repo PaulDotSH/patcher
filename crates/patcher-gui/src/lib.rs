@@ -14,6 +14,7 @@ pub mod expand;
 pub mod flow;
 pub mod live;
 pub mod platform;
+pub mod sim;
 pub mod strings;
 pub mod snapshot;
 pub mod theme;

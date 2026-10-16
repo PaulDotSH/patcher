@@ -39,6 +39,9 @@ enum Cmd {
     Verify { patch: PathBuf, game: PathBuf },
     /// Restore the original files from the backup left by `apply`.
     Revert { game: PathBuf },
+    /// Preview a GUI theme: a simulated install (or a verify-only run of --patch) that
+    /// reloads whenever the theme's folder changes.
+    GuiPreview(PreviewArgs),
     /// Show a patch's metadata and contents.
     Info {
         patch: PathBuf,
@@ -146,6 +149,25 @@ struct CreateArgs {
 }
 
 #[derive(clap::Args)]
+struct PreviewArgs {
+    /// Theme file (default: the built-in look).
+    #[arg(long, value_name = "THEME.toml")]
+    gui: Option<PathBuf>,
+    /// Show this patch's details and verify it against the game folder (never applies).
+    #[arg(long)]
+    patch: Option<PathBuf>,
+    /// Game folder to start with.
+    #[arg(long)]
+    game: Option<PathBuf>,
+    /// End the simulated install on the error screen.
+    #[arg(long)]
+    fail: bool,
+    /// Render every screen to PNG files in this folder and exit.
+    #[arg(long, value_name = "DIR")]
+    screenshot: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
 struct ApplyArgs {
     patch: PathBuf,
     game: PathBuf,
@@ -201,6 +223,7 @@ fn main() -> ExitCode {
         Cmd::Revert { game } => {
             patcher_core::revert(&game, &Console::default()).map(|(name, n)| println!("Reverted {name}: {n} files restored")).map_err(Into::into)
         }
+        Cmd::GuiPreview(a) => gui_preview(a),
         Cmd::Info { patch, json } => info(&patch, json),
     };
     match r {
@@ -365,6 +388,38 @@ fn prepare_gui(theme_file: Option<&Path>) -> Result<(patcher_gui::Theme, Option<
     checked.map_err(|e| anyhow::anyhow!("{e}"))?;
     let bundle = theme_file.map(patcher_gui::bundle::pack).transpose()?;
     Ok((theme, bundle))
+}
+
+fn gui_preview(a: PreviewArgs) -> Result<()> {
+    use patcher_gui::app::{RunOptions, StartMode};
+    use patcher_gui::backend::Backend;
+    let theme = match &a.gui {
+        Some(p) => patcher_gui::Theme::load(p)?,
+        None => patcher_gui::Theme::builtin(),
+    };
+    let backend: std::sync::Arc<dyn Backend> = match &a.patch {
+        Some(p) => std::sync::Arc::new(patcher_gui::sim::VerifyOnly::new(Patch::open(p).with_context(|| p.display().to_string())?)),
+        None => std::sync::Arc::new(patcher_gui::sim::SimBackend { meta: patcher_gui::snapshot::demo_meta(), fail: a.fail }),
+    };
+    let work = std::env::temp_dir().join(format!("patcher-preview-{}", std::process::id()));
+    let r = if let Some(dir) = &a.screenshot {
+        patcher_gui::snapshot::render_all(&theme, &backend.meta(), &work, dir).map(|files| {
+            for f in files {
+                println!("{}", f.display());
+            }
+        })
+    } else {
+        let start = match a.game {
+            Some(g) => StartMode::Folder(g),
+            None => StartMode::Detect { exe_dir: std::env::current_dir()? },
+        };
+        if a.gui.is_some() {
+            eprintln!("Watching the theme folder; save a file to reload.");
+        }
+        patcher_gui::app::run(RunOptions { theme, backend, start, work: work.clone(), watch: a.gui })
+    };
+    let _ = std::fs::remove_dir_all(&work);
+    r.map_err(|e| anyhow::anyhow!(e))
 }
 
 fn file_stem(name: &str) -> String {
