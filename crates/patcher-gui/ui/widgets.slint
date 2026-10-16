@@ -48,7 +48,7 @@ export component Tag inherits Rectangle {
 
 // The mod's name in display type, or its logo.
 export component Wordmark inherits Rectangle {
-    in property <length> font-size: 60px;
+    in property <length> font-size: Theme.wordmark-size;
     height: Theme.has-logo ? root.font-size * 1.4 : row.preferred-height;
     if Theme.has-logo: Image {
         x: 0;

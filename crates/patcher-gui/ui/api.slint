@@ -38,6 +38,8 @@ export global Theme {
     // The wordmark is drawn as `wordmark` followed by `tag` in the tilted accent box.
     in property <string> wordmark: "";
     in property <string> tag: "PATCHER";
+    // Display size that fits the wordmark on one line (set by the patcher).
+    in property <length> wordmark-size: 60px;
     in property <Corner> credit-position: Corner.bottom-left;
 }
 

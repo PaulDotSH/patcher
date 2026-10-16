@@ -67,6 +67,15 @@ pub fn config(theme: &Theme, meta: &Meta) -> Config {
     }
 }
 
+/// Font size (px) that fits the wordmark on one line in a window `width` wide, assuming a
+/// condensed display face (about half an em per character).
+pub fn wordmark_size(mark: &str, tag: &str, width: u32) -> f64 {
+    let chars = (mark.chars().count() + tag.chars().count()) as f64;
+    // Side padding, the gap before the tag and the tag's own padding.
+    let avail = f64::from(width) - 88.0;
+    (avail / (0.5 * chars + 0.75)).clamp(28.0, 60.0)
+}
+
 /// The wordmark and the word in the tag. The tag defaults to the last word.
 pub fn wordmark(theme: &Theme, name: &str) -> (String, String) {
     let look = &theme.file.theme;
@@ -143,6 +152,7 @@ pub fn apply_theme(inst: &ComponentInstance, theme: &Theme, strings: &HashMap<St
         set(inst, "Theme", "logo", Value::Image(img));
     }
     let (mark, tag) = wordmark(theme, name);
+    set(inst, "Theme", "wordmark-size", Value::Number(wordmark_size(&mark, &tag, theme.file.window.width)));
     set(inst, "Theme", "wordmark", s(&mark));
     set(inst, "Theme", "tag", s(&tag));
     for (k, v) in strings {
