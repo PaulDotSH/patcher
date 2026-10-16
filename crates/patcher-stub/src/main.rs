@@ -142,7 +142,7 @@ fn run() -> Result<(), String> {
     }
     let report = match &args.out {
         Some(out) => patcher_core::apply_to_copy(&patch, &game, out, &progress),
-        None => patcher_core::apply(&patch, &game, &ApplyOptions { backup: !args.no_backup, progress: &progress }),
+        None => patcher_core::apply(&patch, &game, &ApplyOptions { backup: !args.no_backup, progress: &progress, cancel: None }),
     }
     .map_err(|e| e.to_string())?;
     println!(

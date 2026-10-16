@@ -54,11 +54,11 @@ fn roundtrip(scenario: usize, preset: Preset, strong: bool) {
     let base_listing = tree_listing(&game).unwrap();
     assert_eq!(patcher_core::inspect(&patch, &game, &Silent).unwrap(), GameState::Unpatched);
 
-    patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &Silent }).unwrap();
+    patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &Silent, cancel: None }).unwrap();
     assert_eq!(tree_listing(&game).unwrap(), tree_listing(&sc.modded).unwrap(), "{tag}: patched game differs");
     assert_eq!(patcher_core::inspect(&patch, &game, &Silent).unwrap(), GameState::Patched);
     assert!(matches!(
-        patcher_core::apply(&patch, &game, &ApplyOptions { backup: false, progress: &Silent }),
+        patcher_core::apply(&patch, &game, &ApplyOptions { backup: false, progress: &Silent, cancel: None }),
         Err(Error::AlreadyApplied)
     ));
 
@@ -103,7 +103,7 @@ fn progress_matches_phase_totals() {
         let patch = Patch::open(&patch_path).unwrap();
         let game = fresh_game(&format!("{}-progress", sc.name));
         let rec = Recorder::default();
-        patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &rec }).unwrap();
+        patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &rec, cancel: None }).unwrap();
         let seen: Vec<(Phase, u64)> = rec.phases.lock().unwrap().iter().map(|&(p, t, _)| (p, t)).collect();
         assert_eq!(seen, patcher_core::phase_totals(&patch).to_vec(), "{}: declared totals", sc.name);
         for &(p, t, sum) in rec.phases.lock().unwrap().iter() {
@@ -111,6 +111,44 @@ fn progress_matches_phase_totals() {
         }
         let files = patch.index.base_files.len() + patch.index.writes.len();
         assert_eq!(rec.files.load(std::sync::atomic::Ordering::Relaxed), files, "{}: file calls", sc.name);
+        std::fs::remove_dir_all(&game).unwrap();
+    }
+}
+
+/// Sets its flag on the first increment of `at`.
+struct CancelAt {
+    at: Phase,
+    current: std::sync::Mutex<Option<Phase>>,
+    flag: std::sync::atomic::AtomicBool,
+}
+
+impl Progress for CancelAt {
+    fn begin(&self, phase: Phase, _: u64) {
+        *self.current.lock().unwrap() = Some(phase);
+    }
+    fn inc(&self, _: u64) {
+        if *self.current.lock().unwrap() == Some(self.at) {
+            self.flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    fn end(&self) {}
+}
+
+#[test]
+fn cancel_leaves_the_game_untouched() {
+    let (root, c) = corpus();
+    let sc = &c.scenarios[0];
+    let patch_path = root.join("cancel.patch");
+    patcher_create::create(&opts(&c.base, &sc.modded, Preset::Fast, false), &patch_path, &Silent).unwrap();
+    let patch = Patch::open(&patch_path).unwrap();
+    for at in [Phase::Verify, Phase::Decode] {
+        let game = fresh_game(&format!("cancel-{at:?}"));
+        let before = tree_listing(&game).unwrap();
+        let p = CancelAt { at, current: Default::default(), flag: Default::default() };
+        let r = patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &p, cancel: Some(&p.flag) });
+        assert!(matches!(r, Err(Error::Cancelled)), "{at:?}: {r:?}");
+        assert_eq!(tree_listing(&game).unwrap(), before, "{at:?}: game changed");
+        assert!(!game.join(patcher_core::apply::STAGING_DIR).exists() && !game.join(patcher_core::apply::BACKUP_DIR).exists());
         std::fs::remove_dir_all(&game).unwrap();
     }
 }
@@ -130,7 +168,7 @@ fn no_backup_and_copy_modes() {
     let patch = Patch::open(&patch_path).unwrap();
 
     let game = fresh_game("no-backup");
-    patcher_core::apply(&patch, &game, &ApplyOptions { backup: false, progress: &Silent }).unwrap();
+    patcher_core::apply(&patch, &game, &ApplyOptions { backup: false, progress: &Silent, cancel: None }).unwrap();
     assert_eq!(tree_listing(&game).unwrap(), tree_listing(&sc.modded).unwrap());
     assert!(patcher_core::revert(&game, &Silent).is_err());
 
@@ -156,7 +194,7 @@ fn rejects_wrong_base_without_touching_it() {
     d[5000] ^= 1;
     std::fs::write(&exe, &d).unwrap();
     let before = tree_listing(&game).unwrap();
-    match patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &Silent }) {
+    match patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &Silent, cancel: None }) {
         Err(Error::BaseMismatch(list)) => assert_eq!(list, vec!["changed: Game.exe".to_string()]),
         other => panic!("expected mismatch, got {other:?}"),
     }
@@ -184,7 +222,7 @@ fn standalone_patcher_carries_the_patch() {
     assert!(Patch::open_embedded(&patch_path).unwrap().is_none());
 
     let game = fresh_game("standalone");
-    patcher_core::apply(&embedded, &game, &ApplyOptions { backup: true, progress: &Silent }).unwrap();
+    patcher_core::apply(&embedded, &game, &ApplyOptions { backup: true, progress: &Silent, cancel: None }).unwrap();
     assert_eq!(tree_listing(&game).unwrap(), tree_listing(&sc.modded).unwrap());
 }
 
@@ -228,7 +266,7 @@ fn corrupt_patches_are_rejected() {
     if let Ok(p) = Patch::from_vec(bad) {
         let game = fresh_game("corrupt");
         let before = tree_listing(&game).unwrap();
-        assert!(patcher_core::apply(&p, &game, &ApplyOptions { backup: true, progress: &Silent }).is_err());
+        assert!(patcher_core::apply(&p, &game, &ApplyOptions { backup: true, progress: &Silent, cancel: None }).is_err());
         assert_eq!(tree_listing(&game).unwrap(), before);
     }
 }
@@ -273,7 +311,7 @@ fn case_only_renames_are_overwrites() {
     for backup in [true, false] {
         let (patch, game) = hand_patch(&format!("case-{backup}"), &base, &modded);
         assert_eq!(patch.index.base_files.iter().filter(|b| b.path == "Data/Hero.png").count(), 1);
-        patcher_core::apply(&patch, &game, &ApplyOptions { backup, progress: &Silent }).unwrap();
+        patcher_core::apply(&patch, &game, &ApplyOptions { backup, progress: &Silent, cancel: None }).unwrap();
         assert_eq!(std::fs::read(game.join("Data").join("Hero.png")).unwrap(), hero_new);
         assert_eq!(std::fs::read(game.join("Data").join("Same.txt")).unwrap(), b"same");
         assert!(!game.join("Data").join("Gone.txt").exists());
@@ -290,10 +328,10 @@ fn add_only_patch_is_detected_as_applied() {
     let modded = tree("addonly", "modded", &[("a.txt", b"a"), ("mods/new.txt", b"new file")]);
     let (patch, game) = hand_patch("addonly", &base, &modded);
     assert_eq!(patcher_core::inspect(&patch, &game, &Silent).unwrap(), GameState::Unpatched);
-    patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &Silent }).unwrap();
+    patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &Silent, cancel: None }).unwrap();
     assert_eq!(patcher_core::inspect(&patch, &game, &Silent).unwrap(), GameState::Patched);
     assert!(matches!(
-        patcher_core::apply(&patch, &game, &ApplyOptions { backup: false, progress: &Silent }),
+        patcher_core::apply(&patch, &game, &ApplyOptions { backup: false, progress: &Silent, cancel: None }),
         Err(Error::AlreadyApplied)
     ));
 }
@@ -304,7 +342,7 @@ fn files_and_directories_swap_places() {
     let modded = tree("swap", "modded", &[("foo", b"file foo"), ("bar/y.txt", b"y in dir bar"), ("keep.txt", b"k")]);
     for backup in [true, false] {
         let (patch, game) = hand_patch(&format!("swap-{backup}"), &base, &modded);
-        patcher_core::apply(&patch, &game, &ApplyOptions { backup, progress: &Silent }).unwrap();
+        patcher_core::apply(&patch, &game, &ApplyOptions { backup, progress: &Silent, cancel: None }).unwrap();
         assert_eq!(tree_listing(&game).unwrap(), tree_listing(&modded).unwrap());
         if backup {
             patcher_core::revert(&game, &Silent).unwrap();
@@ -334,7 +372,7 @@ fn exec_bit_only_change_ships() {
     std::fs::set_permissions(modded.join("run.sh"), std::fs::Permissions::from_mode(0o755)).unwrap();
     let (patch, game) = hand_patch("exec", &base, &modded);
     assert_eq!(patch.index.writes.len(), 1);
-    patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &Silent }).unwrap();
+    patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &Silent, cancel: None }).unwrap();
     assert_eq!(std::fs::metadata(game.join("run.sh")).unwrap().permissions().mode() & 0o777, 0o755);
     assert_eq!(patcher_core::inspect(&patch, &game, &Silent).unwrap(), GameState::Patched);
 }

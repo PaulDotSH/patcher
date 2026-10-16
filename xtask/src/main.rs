@@ -151,7 +151,7 @@ fn timed_apply(patch_path: &Path, base: &Path, modded: &Path, game: &Path) -> Re
     copy_tree(base, game)?;
     let t = Instant::now();
     let patch = Patch::open(patch_path)?;
-    patcher_core::apply(&patch, game, &ApplyOptions { backup: true, progress: &Silent })?;
+    patcher_core::apply(&patch, game, &ApplyOptions { backup: true, progress: &Silent, cancel: None })?;
     let secs = t.elapsed().as_secs_f64();
     if tree_listing(game)? != tree_listing(modded)? {
         bail!("{}: patched game differs from the modded folder", patch_path.display());

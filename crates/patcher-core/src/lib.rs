@@ -17,7 +17,7 @@ pub mod varint;
 
 use std::path::PathBuf;
 
-pub use apply::{apply, apply_to_copy, inspect, phase_totals, revert, ApplyOptions, ApplyReport, GameState};
+pub use apply::{apply, apply_to_copy, inspect, inspect_with, phase_totals, revert, ApplyOptions, ApplyReport, GameState};
 pub use patch::Patch;
 
 #[derive(Debug, thiserror::Error)]
@@ -34,6 +34,8 @@ pub enum Error {
     BaseMismatch(Vec<String>),
     #[error("this patch is already applied")]
     AlreadyApplied,
+    #[error("cancelled; nothing was changed")]
+    Cancelled,
     #[error("{0}")]
     Other(String),
 }

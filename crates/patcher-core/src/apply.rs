@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use bitcode::{Decode, Encode};
 use rayon::prelude::*;
@@ -33,6 +34,12 @@ pub struct ApplyOptions<'a> {
     /// Keep the replaced and deleted originals so `revert` can restore them.
     pub backup: bool,
     pub progress: &'a dyn Progress,
+    /// Set from another thread to stop before the commit; checked before each file.
+    pub cancel: Option<&'a AtomicBool>,
+}
+
+fn check_cancel(cancel: Option<&AtomicBool>) -> Result<()> {
+    if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) { Err(Error::Cancelled) } else { Ok(()) }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -89,7 +96,12 @@ fn commit_ops(idx: &Index) -> u64 {
 
 /// Reports whether `patch` can be applied to `game`, is already applied, or neither.
 pub fn inspect(patch: &Patch, game: &Path, progress: &dyn Progress) -> Result<GameState> {
-    match verify_base(&patch.index, game, progress)? {
+    inspect_with(patch, game, progress, None)
+}
+
+/// [`inspect`] that stops with [`Error::Cancelled`] once `cancel` is set.
+pub fn inspect_with(patch: &Patch, game: &Path, progress: &dyn Progress, cancel: Option<&AtomicBool>) -> Result<GameState> {
+    match verify_base(&patch.index, game, progress, cancel)? {
         Ok(_) if patched_over_base(&patch.index, game)? => Ok(GameState::Patched),
         Ok(_) => Ok(GameState::Unpatched),
         Err(_) if is_patched(&patch.index, game)? => Ok(GameState::Patched),
@@ -106,7 +118,7 @@ pub fn apply(patch: &Patch, game: &Path, opts: &ApplyOptions) -> Result<ApplyRep
             backup_root.display()
         )));
     }
-    let base = match verify_base(idx, game, opts.progress)? {
+    let base = match verify_base(idx, game, opts.progress, opts.cancel)? {
         Ok(_) if patched_over_base(idx, game)? => return Err(Error::AlreadyApplied),
         Ok(b) => b,
         Err(_) if is_patched(idx, game)? => return Err(Error::AlreadyApplied),
@@ -116,7 +128,7 @@ pub fn apply(patch: &Patch, game: &Path, opts: &ApplyOptions) -> Result<ApplyRep
     let staging = game.join(STAGING_DIR);
     let _ = fs::remove_dir_all(&staging);
     fs::create_dir_all(&staging).at(&staging)?;
-    let staged = stage(patch, &base.maps, &staging, opts.progress);
+    let staged = stage(patch, &base.maps, &staging, opts.progress, opts.cancel).and_then(|()| check_cancel(opts.cancel));
     // Windows cannot rename or delete files that are still mapped.
     let BaseFiles { paths: base_paths, maps } = base;
     drop(maps);
@@ -133,12 +145,12 @@ pub fn apply_to_copy(patch: &Patch, game: &Path, out: &Path, progress: &dyn Prog
     if canonical_lenient(out)?.starts_with(fs::canonicalize(game).at(game)?) {
         return Err(Error::Other(format!("the output folder {} is inside the game folder", out.display())));
     }
-    if let Err(list) = verify_base(&patch.index, game, progress)? {
+    if let Err(list) = verify_base(&patch.index, game, progress, None)? {
         return Err(Error::BaseMismatch(list));
     }
     progress.note(&format!("Copying game to {}", out.display()));
     copy_tree(game, out)?;
-    let r = apply(patch, out, &ApplyOptions { backup: false, progress });
+    let r = apply(patch, out, &ApplyOptions { backup: false, progress, cancel: None });
     if r.is_err() {
         let _ = fs::remove_dir_all(out);
     }
@@ -197,7 +209,12 @@ pub fn revert(game: &Path, progress: &dyn Progress) -> Result<(String, usize)> {
 }
 
 /// Resolves and checks every base file. The inner `Err` lists mismatches.
-fn verify_base(idx: &Index, game: &Path, progress: &dyn Progress) -> Result<Result<BaseFiles, Vec<String>>> {
+fn verify_base(
+    idx: &Index,
+    game: &Path,
+    progress: &dyn Progress,
+    cancel: Option<&AtomicBool>,
+) -> Result<Result<BaseFiles, Vec<String>>> {
     let mut problems = Vec::new();
     let mut paths_ = Vec::with_capacity(idx.base_files.len());
     for b in &idx.base_files {
@@ -223,6 +240,7 @@ fn verify_base(idx: &Index, game: &Path, progress: &dyn Progress) -> Result<Resu
         .par_iter()
         .zip(&idx.base_files)
         .map(|(p, b)| {
+            check_cancel(cancel)?;
             progress.file(&b.path);
             let m = Mapped::open(p)?;
             let ok = hash::matches(&b.check, &m);
@@ -276,7 +294,13 @@ fn is_patched(idx: &Index, game: &Path) -> Result<bool> {
 }
 
 /// Decodes every output into `staging/<write index>`.
-fn stage(patch: &Patch, maps: &[Mapped], staging: &Path, progress: &dyn Progress) -> Result<()> {
+fn stage(
+    patch: &Patch,
+    maps: &[Mapped],
+    staging: &Path,
+    progress: &dyn Progress,
+    cancel: Option<&AtomicBool>,
+) -> Result<()> {
     let idx = &patch.index;
     let total = idx.writes.iter().map(|w| w.check.size).sum();
     progress.begin(Phase::Decode, total);
@@ -304,12 +328,14 @@ fn stage(patch: &Patch, maps: &[Mapped], staging: &Path, progress: &dyn Progress
     });
 
     jobs.par_iter().try_for_each(|job| match job {
-        Job::Single(i) => stage_single(patch, maps, staging, *i, &budget, progress),
+        Job::Single(i) => stage_single(patch, maps, staging, *i, &budget, progress, cancel),
         Job::Group(g, members) => {
+            check_cancel(cancel)?;
             let group = &idx.solid[*g];
             let _permit = budget.acquire(group.len.saturating_mul(2));
             let data = codec::decompress(group.comp, patch.blob(group.blob)?, None, group.len as usize)?;
             members.par_iter().try_for_each(|&i| {
+                check_cancel(cancel)?;
                 let w = &idx.writes[i];
                 progress.file(&w.path);
                 let Source::Solid { offset, .. } = w.source else { unreachable!() };
@@ -332,7 +358,9 @@ fn stage_single(
     i: usize,
     budget: &Budget,
     progress: &dyn Progress,
+    cancel: Option<&AtomicBool>,
 ) -> Result<()> {
+    check_cancel(cancel)?;
     let w = &patch.index.writes[i];
     progress.file(&w.path);
     let path = staging.join(i.to_string());
@@ -350,6 +378,7 @@ fn stage_single(
             // One permit covers a whole batch, taken and released on this thread.
             let batch = if segs.len() > 1 { rayon::current_num_threads() } else { 1 };
             for group in segs.chunks(batch) {
+                check_cancel(cancel)?;
                 let est = group.iter().fold(0u64, |a, seg| {
                     let dict = match seg.codec {
                         Codec::Full(Comp::Lzma2 { dict_size })

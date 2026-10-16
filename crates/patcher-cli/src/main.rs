@@ -410,7 +410,7 @@ fn apply(a: ApplyArgs) -> Result<()> {
     let progress = Console::default();
     let report = match &a.out {
         Some(out) => patcher_core::apply_to_copy(&patch, &a.game, out, &progress)?,
-        None => patcher_core::apply(&patch, &a.game, &ApplyOptions { backup: !a.no_backup, progress: &progress })?,
+        None => patcher_core::apply(&patch, &a.game, &ApplyOptions { backup: !a.no_backup, progress: &progress, cancel: None })?,
     };
     println!(
         "Done: {} files written ({}), {} deleted{}",
