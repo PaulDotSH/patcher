@@ -1,0 +1,15 @@
+[package]
+name = "patcher-stub-gui"
+description = "End-user patcher with an installer window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+memmap2.workspace = true
+patcher-core.workspace = true
+patcher-gui.workspace = true
+patcher-stub.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }

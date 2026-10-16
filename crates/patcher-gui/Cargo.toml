@@ -10,6 +10,7 @@ license.workspace = true
 pack = ["dep:zstd"]
 
 [dependencies]
+arboard = { version = "3.7.0", default-features = false, features = ["wayland-data-control"] }
 bitcode.workspace = true
 patcher-core.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
@@ -18,9 +19,13 @@ slint-interpreter = { version = "=1.18.1", default-features = false, features = 
 spin_on = "0.1"
 thiserror.workspace = true
 png = "0.18.1"
+rfd = "0.17.2"
 toml = "1.1.8"
 ttf-parser = "0.25.1"
 xxhash-rust.workspace = true
 zstd = { version = "0.14.2", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]

@@ -17,6 +17,9 @@ strip = true
 [profile.release.package.patcher-stub]
 opt-level = 3
 
+[profile.release.package.patcher-stub-gui]
+opt-level = "z"
+
 [patch.crates-io]
 ruzstd = { path = "vendor/ruzstd" }
 

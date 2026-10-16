@@ -5,11 +5,15 @@
 //! - [`compile`]: the built-in Slint library plus the theme, compiled with the interpreter;
 //! - [`color`], [`strings`], [`expand`]: palette derivation, UI strings, path expansion.
 
+pub mod app;
+pub mod backend;
 pub mod bundle;
 pub mod color;
 pub mod compile;
 pub mod expand;
 pub mod flow;
+pub mod live;
+pub mod platform;
 pub mod strings;
 pub mod snapshot;
 pub mod theme;
