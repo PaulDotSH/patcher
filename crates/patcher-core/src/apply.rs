@@ -157,6 +157,13 @@ pub fn apply_to_copy(patch: &Patch, game: &Path, out: &Path, progress: &dyn Prog
     r
 }
 
+/// Name and version of the patch whose backup is in `game`, if there is one.
+pub fn backup_owner(game: &Path) -> Option<(String, String)> {
+    let raw = fs::read(game.join(BACKUP_DIR).join(MANIFEST)).ok()?;
+    let man: Manifest = bitcode::decode(&raw).ok()?;
+    Some((man.patch_name, man.patch_version))
+}
+
 /// Restores the game from `.patcher-backup/`.
 pub fn revert(game: &Path, progress: &dyn Progress) -> Result<(String, usize)> {
     let root = game.join(BACKUP_DIR);

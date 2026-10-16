@@ -9,6 +9,7 @@ pub mod bundle;
 pub mod color;
 pub mod compile;
 pub mod expand;
+pub mod flow;
 pub mod strings;
 pub mod theme;
 
