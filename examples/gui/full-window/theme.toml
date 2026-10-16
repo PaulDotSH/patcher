@@ -1,0 +1,22 @@
+# Replaces the whole window: a light layout with a sidebar of steps. It reuses the
+# built-in widgets and screens where they fit and draws its own frame.
+#
+#   patcher gui-preview --gui examples/gui/full-window/theme.toml
+
+[window]
+width = 820
+height = 500
+
+[theme]
+base = "light"
+accent = "#2f5bea"
+uppercase = false
+
+[theme.colors]
+panel = "#ffffff"
+
+[layout]
+installer = "installer.slint"
+
+[credit]
+position = "bottom-left"

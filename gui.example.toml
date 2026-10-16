@@ -1,0 +1,119 @@
+# Every key of a GUI theme, with its default. Use it with
+#
+#   patcher create ... --gui path/to/theme.toml        (or `gui = "theme.toml"` in --config)
+#   patcher gui-preview --gui path/to/theme.toml       (live preview, reloads on save)
+#
+# Every key is optional; an empty file is the built-in look. Paths are relative to this
+# file and must stay inside its folder: the whole folder is packed into the patcher, so
+# keep the theme in a folder of its own. See docs/gui.md for the details.
+
+[window]
+width = 760                 # 320..4096
+height = 480                # 240..4096
+# title = "My Mod"          # window title; default: the mod's name
+# icon = "icon.png"         # window icon, and the Windows .exe icon (PNG or JPEG for the .exe)
+
+[theme]
+base = "dark"               # dark | light: the neutral colours
+accent = "#c6ff3d"          # derives accent-ink, accent-soft and accent-glow
+# wordmark = "My Mod"       # big title on the welcome screen; default: the mod's name
+# tag = "Mod"               # word drawn in the tilted accent box; default: the last word; "" for none
+# logo = "logo.png"         # replaces the wordmark
+background = "glow"         # glow | grid | image | none
+# background_image = "bg.png"   # with background = "image"
+shadows = true              # hard offset shadows under buttons and the tag
+uppercase = true            # uppercase the wordmark, headings and buttons
+
+[theme.colors]              # override any single colour
+# bg = "#0b0b0c"
+# panel = "#141416"
+# raised = "#1b1b1f"
+# border = "#26262b"
+# border-hover = "#3a3a42"
+# text = "#f3f3ee"
+# dim = "#a6a69e"
+# faint = "#6e6e68"
+# accent = "#c6ff3d"
+# accent-ink = "#0b0b0c"
+# accent-soft = "#c6ff3d1a"
+# accent-glow = "#c6ff3d59"
+# ok = "#c6ff3d"
+# bad = "#ff5b4f"
+# warn = "#ffc53d"
+
+[theme.fonts]               # TTF/OTF files; defaults: Anton, Inter, JetBrains Mono
+# display = "fonts/Display.ttf"   # wordmark, headings, buttons
+# body = "fonts/Body.ttf"         # everything else
+# mono = "fonts/Mono.ttf"         # paths, file names, details
+
+[layout]
+# installer = "installer.slint"   # replaces the whole window content (exports `Installer`)
+
+[layout.parts]              # replace single parts; each file exports the named component
+# titlebar = "titlebar.slint"     # TitleBar
+# background = "background.slint" # Background
+# welcome = "welcome.slint"       # WelcomeScreen
+# license = "license.slint"       # LicenseScreen
+# folder = "folder.slint"         # FolderScreen
+# options = "options.slint"       # OptionsScreen
+# progress = "progress.slint"     # ProgressScreen
+# done = "done.slint"             # DoneScreen
+# error = "error.slint"           # ErrorScreen
+# buttons = "buttons.slint"       # NavButtons
+
+[screens]
+welcome = true
+options = true              # the backup checkbox (on the welcome screen when there is no license page)
+# license = "LICENSE.txt"   # adds a license page
+require_accept = false      # Next stays disabled until "I accept" is ticked
+
+[paths]                     # where to look for the game first; the first that matches wins
+windows = []                # e.g. ['%ProgramFiles(x86)%\Steam\steamapps\common\My Game']
+linux = []                  # e.g. ["~/.local/share/Steam/steamapps/common/My Game"]
+
+[launch]                    # the "Launch game" button on the done screen
+# windows = "Game.exe"      # relative to the game folder
+# linux = "game.sh"
+# steam_app_id = 123456     # launches through Steam instead
+
+[credit]
+position = "bottom-left"    # bottom-left | bottom-right | top-left | top-right
+
+[strings]                   # override any text; {name}, {version} and {author} are filled in
+# next = "Next"
+# back = "Back"
+# patch = "Patch"
+# patch_admin = "Patch as administrator"
+# cancel = "Cancel"
+# close = "Close"
+# revert = "Remove mod"
+# launch = "Launch game"
+# open_folder = "Open folder"
+# browse = "Browse"
+# copy_details = "Copy details"
+# show_log = "Show log"
+# finishing = "Finishing..."
+# by_author = "by {author}"
+# version_label = "Version {version}"
+# welcome_heading = "Ready to install"
+# revert_offer = "This mod is installed in the game folder. You can remove it and restore the original files."
+# license_heading = "License"
+# license_accept = "I accept the license"
+# folder_heading = "Game folder"
+# folder_hint = "Choose the folder that contains the game."
+# status_checking = "Checking files..."
+# status_ok = "Game found, ready to patch"
+# status_already = "This mod is already installed"
+# status_mismatch = "These files do not match the game version this mod needs"
+# status_not_found = "The game was not found in this folder"
+# options_heading = "Options"
+# backup_label = "Keep a backup so the mod can be removed later"
+# progress_heading = "Installing"
+# progress_heading_revert = "Removing"
+# done_heading = "Done"
+# done_installed = "{name} is installed."
+# done_reverted = "{name} was removed and the original files restored."
+# done_already = "{name} is already installed."
+# error_heading = "Something went wrong"
+# cancelled = "Cancelled; nothing was changed."
+# elevation_declined = "Administrator access was declined."

@@ -17,8 +17,8 @@ their own copy of the game.
 | archives | opaque blobs; the `Transform` enum is the extension point for format-aware handling (e.g. PopCap `.pak`) |
 | hashing | size + xxh3 always; BLAKE3 per file unless the author passes `--no-verify` |
 | safety | stage into `.patcher-staging/`, verify every output, commit by rename, roll back on failure; originals kept in `.patcher-backup/` (`--revert`), `--no-backup` to skip |
-| UI | CLI only for now; progress goes through the `Progress` trait so a GUI can plug in |
-| platforms | Windows and Linux; the stub is pure Rust and cross-compiles to static musl with `rust-lld` |
+| UI | installer window (Slint, software renderer) by default, console patcher with `--ui cli`; themes are TOML plus optional Slint, compiled by `slint-interpreter` at create time (to reject errors) and at start-up. See [docs/gui.md](docs/gui.md) and the [spec](docs/superpowers/specs/2026-10-16-gui-installer-design.md) |
+| platforms | Windows and Linux; the console stub is pure Rust and cross-compiles to static musl with `rust-lld`; the GUI stub needs glibc on Linux (X11/Wayland are loaded at run time) and is built natively there |
 | codecs | creator uses native libzstd (best ratios) and `lzma-rust2`; the stub decodes with a vendored `ruzstd` (plus a raw-prefix API) and `lzma-rust2` |
 | large files | files over 512 MiB are encoded in 64 MiB chunks, each against a base window found by content-defined anchors |
 | license | AGPL-3.0-or-later |
@@ -28,7 +28,12 @@ their own copy of the game.
 - `patcher-core`: format, decoders, apply/verify/revert. Pure Rust, linked by the stub.
 - `patcher-create`: scanning, classification, encoders, bsdiff, patch writer.
 - `patcher-cli`: the `patcher` binary for authors (`create`, `apply`, `verify`, `revert`, `info`).
-- `patcher-stub`: the end-user binary, around 0.6 MB on Windows and 1.1 MB static on Linux.
+- `patcher-stub`: the console end-user binary, around 0.6 MB on Windows and 1.1 MB static
+  on Linux. Its flow is a library function so the GUI stub's headless mode reuses it.
+- `patcher-gui`: themes, the UI bundle, the built-in Slint library, the screen flow (a
+  plain state machine), and the runtime that drives it. Linked by the GUI stub and the
+  creator.
+- `patcher-stub-gui`: the installer end-user binary, about 12 MB.
 - `patcher-testgen`: deterministic synthetic game and mod scenarios.
 - `xtask`: `dist`, `gen-corpus`, `bench`.
 - `vendor/ruzstd`: ruzstd 0.9.1 (MIT) plus `FrameDecoder::set_raw_prefix`, needed to
@@ -51,9 +56,12 @@ Blobs            independent payloads, referenced by (offset, len)
 Index            zstd frame of a bitcode-encoded `Index`
 ```
 
-A standalone patcher is `stub ++ patch ++ footer`, and the footer is
-`patch_offset u64, patch_len u64, "PTCHEND1"`. The stub reads its own executable, finds
-the footer, and memory-maps the patch inside itself.
+A standalone patcher is `stub ++ [UI bundle] ++ [patch] ++ footer`, and the 40-byte
+footer is `ui_offset u64, ui_len u64, patch_offset u64, patch_len u64, "PTCHEND2"`; a
+zero length means that part is absent. The 24-byte v1 footer
+(`patch_offset, patch_len, "PTCHEND1"`) is still read. The stub reads its own executable,
+finds the footer, and memory-maps the patch inside itself. The UI bundle is the theme's
+folder (`"PUI1"`, decoded length, zstd frame of a bitcode file list).
 
 The `Index` (see `crates/patcher-core/src/format.rs`) holds:
 

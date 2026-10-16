@@ -16,13 +16,17 @@ archives and hundreds of assets. Patcher lets you publish only the difference:
 patcher create --base PvZ-original --modded PvZ-mymod --name "My Mod"
 
   MyMod.patch            the compressed difference
-  MyMod-patcher.exe      self-contained patcher for Windows (stub + patch)
-  MyMod-patcher          self-contained patcher for Linux (static, no dependencies)
+  MyMod-patcher.exe      self-contained installer for Windows (stub + patch)
+  MyMod-patcher          self-contained patcher for Linux
 ```
 
-Players run `MyMod-patcher.exe` on their own copy of the game. It checks that the game
-is the right version, patches it, verifies every file, and keeps a backup so the mod can
-be removed with `--revert`.
+Players double-click `MyMod-patcher.exe` next to their own copy of the game. An installer
+window finds the game, checks that it is the right version, patches it, verifies every
+file, and keeps a backup so the mod can be removed again.
+
+<p align="center">
+  <img src="docs/img/gui-welcome.png" alt="The installer window" width="560">
+</p>
 
 ## Highlights
 
@@ -46,9 +50,14 @@ be removed with `--revert`.
 - **Big files.** Files over 512 MiB are encoded in 64 MiB chunks, each matched against
   the right region of the original. A 3 GB file with a few MB of edits patches to about
   12 MB.
-- **Cross-platform.** Windows and Linux. The player-side stub is pure Rust: about 640 KB
-  on Windows and a 1.1 MB static binary on Linux. Off Windows, paths match
-  case-insensitively, so a mod made on Windows still applies.
+- **An installer, your way.** Patchers open an installer window with a progress bar,
+  game-folder detection, cancel, remove-the-mod and a Launch button. Its look is a theme:
+  one line of TOML changes the accent colour, and [Slint](https://slint.dev) files can
+  replace any part of the window or all of it ([docs/gui.md](docs/gui.md)). Console
+  patchers are one flag away.
+- **Cross-platform.** Windows and Linux. The console stub is pure Rust: about 640 KB on
+  Windows and a 1.1 MB static binary on Linux; the installer stub is about 12 MB. Off
+  Windows, paths match case-insensitively, so a mod made on Windows still applies.
 
 ## For mod authors
 
@@ -81,6 +90,9 @@ profile = "balanced"   # fast | balanced | max
 | `--no-verify` | skip per-file BLAKE3 (smaller, faster); size + xxh3 is still checked |
 | `--exclude GLOB` | leave paths out (gitignore syntax, repeatable); `<modded>/.patcherignore` is read too |
 | `--target windows\|linux\|all` | which standalone patchers to build (default `all`) |
+| `--ui gui\|cli` | installer window (default) or console patcher |
+| `--gui theme.toml` | theme for the installer window, see [docs/gui.md](docs/gui.md) |
+| `--detached` | patchers without the patch inside; they read the `.patch` next to them |
 | `--no-standalone` | only write the `.patch` |
 | `--max-mem 8G` | memory budget for the encoders (default 75 % of RAM) |
 | `--report report.md` | per-file table of every candidate encoding and its size |
@@ -92,17 +104,21 @@ patcher info   MyMod.patch [--json]    # metadata and every file operation
 patcher verify MyMod.patch GAME        # unpatched / patched / mismatch (with the differing files)
 patcher apply  MyMod.patch GAME [--no-backup] [--out DIR] [-y]
 patcher revert GAME
+patcher gui-preview [--gui theme.toml]  # preview a theme; reloads when its files change
 ```
 
 Junk such as `Thumbs.db`, `.DS_Store`, `.git/` and `*.log` is excluded automatically.
 
 ## For players
 
-Put `MyMod-patcher.exe` in the game folder and double-click it, or run it from anywhere
-and pass the game folder:
+Double-click `MyMod-patcher.exe`. It looks for the game where the author said it usually
+is, next to itself and in the current folder; otherwise pick the folder. Press Patch.
+Reopening it later offers to remove the mod.
+
+From a terminal, or with a console patcher (`--ui cli`), pass the game folder:
 
 ```text
-MyMod-patcher.exe ["C:/Games/Plants vs. Zombies"] [-y] [--no-backup] [--out DIR]
+MyMod-patcher.exe ["C:/Games/Plants vs. Zombies"] [-y | --silent] [--no-backup] [--out DIR]
 MyMod-patcher.exe --verify      check whether the game matches
 MyMod-patcher.exe --revert      restore the original game
 MyMod-patcher.exe --info        list what the patch changes
@@ -151,7 +167,9 @@ The format, the codecs and every decision are documented in [DESIGN.md](DESIGN.m
 | `patcher-core` | format, pure-Rust decoders, apply / verify / revert (linked by the stub) |
 | `patcher-create` | scanning, classification, encoders, bsdiff, patch writer |
 | `patcher-cli` | `patcher`, the author tool |
-| `patcher-stub` | the player-side patcher |
+| `patcher-stub` | the player-side console patcher |
+| `patcher-gui` | themes, UI bundles, the built-in Slint layout and the installer runtime |
+| `patcher-stub-gui` | the player-side installer window |
 | `patcher-testgen` | deterministic synthetic games and mod scenarios |
 | `xtask` | `dist`, `gen-corpus`, `gen-large`, `bench` |
 
@@ -160,11 +178,13 @@ The format, the codecs and every decision are documented in [DESIGN.md](DESIGN.m
 ```sh
 rustup target add x86_64-unknown-linux-musl
 cargo test --release --workspace
-cargo xtask dist          # dist/patcher(.exe) with both stubs embedded, plus dist/stubs/
+cargo xtask dist          # dist/patcher(.exe) with this host's stubs embedded, plus dist/stubs/
 ```
 
-The Linux stub cross-compiles from Windows with the `rust-lld` that ships with rustup,
-so no Linux toolchain is needed. The creator links native libzstd, so it needs a C
+On Windows, `dist` builds the Windows installer and console stubs and the Linux console
+stub (cross-compiled with the `rust-lld` that ships with rustup). The Linux installer stub
+needs glibc and is built only on Linux, where `dist` also cross-builds the Windows stubs
+with mingw-w64; a Linux-built `patcher` therefore carries all four. The creator links native libzstd, so it needs a C
 compiler (MSVC on Windows). CI (`.github/workflows/ci.yml`) runs the tests on Windows
 and Linux.
 
@@ -173,7 +193,7 @@ and Linux.
 - [x] Create, apply, verify, revert, info; standalone Windows and Linux patchers
 - [x] Per-file multi-strategy encoding, solid blocks, move detection, large-file chunking
 - [x] Backups, rollback, hostile-patch hardening
-- [ ] GUI for players (the apply engine reports progress through a trait, ready for it)
+- [x] Themeable installer window for players (Slint), with live theme preview
 - [ ] Format-aware handling of known archives (e.g. PopCap `.pak`), via the `Transform` slot
 - [ ] Patches that accept several base versions, and update patches between mod versions
 - [ ] Linux runtime verified in CI (currently compile-checked locally)

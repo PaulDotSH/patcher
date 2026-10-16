@@ -1,0 +1,12 @@
+# Keeps the built-in look and replaces only the progress screen.
+#
+#   patcher gui-preview --gui examples/gui/progress-only/theme.toml
+
+[theme]
+accent = "#ff8a3d"
+
+[layout.parts]
+progress = "progress.slint"
+
+[strings]
+progress_heading = "Installing the mod"

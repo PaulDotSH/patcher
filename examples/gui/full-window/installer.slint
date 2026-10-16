@@ -1,0 +1,134 @@
+// A complete replacement for the built-in window content. The patcher still owns all
+// state: this file only reads the `Patcher` global and calls its callbacks.
+
+import {
+    Patcher, Theme, Strings, Screen,
+    Wordmark, Small, Button, IconButton,
+    WelcomeScreen, LicenseScreen, FolderScreen, OptionsScreen, ProgressScreen, DoneScreen, ErrorScreen,
+} from "@patcher";
+
+component Step inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    in property <bool> passed;
+    height: 34px;
+    HorizontalLayout {
+        spacing: 10px;
+        Rectangle {
+            width: 10px;
+            height: 10px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 5px;
+            background: root.active || root.passed ? Theme.accent : Theme.border;
+        }
+        Text {
+            text: root.label;
+            font-family: Theme.font-body;
+            font-weight: root.active ? 600 : 400;
+            font-size: 14px;
+            color: root.active ? Theme.text : Theme.dim;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component Installer inherits Rectangle {
+    background: Theme.bg;
+    property <int> step: Patcher.screen == Screen.welcome || Patcher.screen == Screen.license ? 0
+        : Patcher.screen == Screen.folder || Patcher.screen == Screen.options ? 1
+        : Patcher.screen == Screen.progress ? 2 : 3;
+
+    HorizontalLayout {
+        // Sidebar: the mod and the steps.
+        Rectangle {
+            width: 220px;
+            background: Theme.accent;
+            TouchArea {
+                pointer-event(ev) => {
+                    if ev.kind == PointerEventKind.down { Patcher.drag-window(); }
+                }
+            }
+            VerticalLayout {
+                padding: 26px;
+                spacing: 6px;
+                alignment: start;
+                Text {
+                    text: Patcher.mod-name;
+                    font-family: Theme.font-display;
+                    font-size: 30px;
+                    color: Theme.accent-ink;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: Patcher.mod-version;
+                    font-family: Theme.font-body;
+                    font-size: 12px;
+                    color: Theme.accent-ink.with-alpha(0.7);
+                }
+            }
+        }
+        // Content: title bar, the current screen, and the buttons.
+        VerticalLayout {
+            HorizontalLayout {
+                height: 44px;
+                padding-right: 6px;
+                padding-left: 26px;
+                alignment: end;
+                TouchArea {
+                    horizontal-stretch: 1;
+                    pointer-event(ev) => {
+                        if ev.kind == PointerEventKind.down { Patcher.drag-window(); }
+                    }
+                }
+                IconButton { icon: "minimize"; clicked => { Patcher.minimize(); } }
+                IconButton { icon: "close"; enabled: Patcher.can-close; clicked => { Patcher.close(); } }
+            }
+            HorizontalLayout {
+                padding-left: 44px;
+                spacing: 24px;
+                height: 34px;
+                Step { label: "Welcome"; active: root.step == 0; passed: root.step > 0; }
+                Step { label: "Folder"; active: root.step == 1; passed: root.step > 1; }
+                Step { label: "Install"; active: root.step == 2; passed: root.step > 2; }
+                Step { label: "Done"; active: root.step == 3; }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                if Patcher.screen == Screen.welcome: WelcomeScreen { }
+                if Patcher.screen == Screen.license: LicenseScreen { }
+                if Patcher.screen == Screen.folder: FolderScreen { }
+                if Patcher.screen == Screen.options: OptionsScreen { }
+                if Patcher.screen == Screen.progress: ProgressScreen { }
+                if Patcher.screen == Screen.done: DoneScreen { }
+                if Patcher.screen == Screen.error: ErrorScreen { }
+            }
+            HorizontalLayout {
+                height: 72px;
+                padding-right: 44px;
+                padding-bottom: 22px;
+                spacing: 12px;
+                alignment: end;
+                if root.step < 2 && Patcher.can-back: Button {
+                    text: Strings.back;
+                    clicked => { Patcher.back(); }
+                }
+                if root.step < 2: Button {
+                    text: Patcher.next-label;
+                    primary: true;
+                    enabled: Patcher.can-next;
+                    clicked => { Patcher.next(); }
+                }
+                if Patcher.screen == Screen.progress: Button {
+                    text: Strings.cancel;
+                    enabled: Patcher.can-cancel;
+                    clicked => { Patcher.cancel(); }
+                }
+                if root.step == 3: Button {
+                    text: Strings.close;
+                    primary: true;
+                    clicked => { Patcher.close(); }
+                }
+            }
+        }
+    }
+}

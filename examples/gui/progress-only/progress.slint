@@ -1,0 +1,45 @@
+// A segmented "block" meter instead of the built-in bar. Everything else is reused from
+// "@patcher": the globals, the heading and the mono text style.
+
+import { Patcher, Theme, Strings, Heading, Mono } from "@patcher";
+
+export component ProgressScreen inherits Rectangle {
+    property <int> blocks: 24;
+    property <int> lit: floor(Patcher.progress * self.blocks);
+
+    VerticalLayout {
+        padding-left: 44px;
+        padding-right: 44px;
+        padding-top: 14px;
+        spacing: 18px;
+        alignment: start;
+
+        Heading {
+            text: Patcher.reverting ? Strings.progress-heading-revert : Strings.progress-heading;
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            height: 34px;
+            for i in root.blocks: Rectangle {
+                border-radius: 2px;
+                // The block being filled pulses with the animation tick.
+                background: i < root.lit ? Theme.accent
+                    : i == root.lit ? Theme.accent.with-alpha(0.25 + 0.25 * sin(Patcher.tick / 600ms * 360deg))
+                    : Theme.panel;
+                border-width: 1px;
+                border-color: i < root.lit ? Theme.accent : Theme.border;
+            }
+        }
+        HorizontalLayout {
+            Mono {
+                text: Patcher.finishing ? Strings.finishing : Patcher.current-file;
+                horizontal-stretch: 1;
+            }
+            Mono {
+                text: round(Patcher.progress * 100) + "%   " + Patcher.eta;
+                color: Theme.accent;
+                horizontal-alignment: right;
+            }
+        }
+    }
+}
