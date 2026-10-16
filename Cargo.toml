@@ -17,7 +17,9 @@ strip = true
 [profile.release.package.patcher-stub]
 opt-level = 3
 
-[profile.release.package.patcher-stub-gui]
+# GUI stubs: the interpreter, winit and the renderer are large; optimise all of it for size.
+[profile.gui-stub]
+inherits = "release"
 opt-level = "z"
 
 [patch.crates-io]

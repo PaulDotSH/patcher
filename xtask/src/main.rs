@@ -1,7 +1,7 @@
 //! Project tasks:
 //!
 //! ```text
-//! cargo xtask dist                         build stubs for Windows + Linux, embed them in dist/patcher(.exe)
+//! cargo xtask dist                         build this host's stubs (see `stub_set`), embed them in dist/patcher(.exe)
 //! cargo xtask gen-corpus [--scale S] [--out DIR]
 //! cargo xtask bench [--scale S] [--large GB] [--out FILE]
 //! ```
@@ -20,7 +20,9 @@ use patcher_create::{Action, CreateOptions, CreateReport, Preset};
 use patcher_testgen::{copy_tree, tree_listing};
 
 const LINUX: &str = "x86_64-unknown-linux-musl";
+const LINUX_GNU: &str = "x86_64-unknown-linux-gnu";
 const WINDOWS: &str = "x86_64-pc-windows-msvc";
+const WINDOWS_GNU: &str = "x86_64-pc-windows-gnu";
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -73,27 +75,66 @@ fn cargo(root: &Path, args: &[&str], envs: &[(&str, &Path)]) -> Result<()> {
     Ok(())
 }
 
-/// Builds both stubs and a creator with them embedded.
+/// One stub `cargo xtask dist` builds: package, target, cargo profile, the env var that
+/// embeds it in the creator, and its file name in `dist/stubs/`.
+struct Stub {
+    package: &'static str,
+    target: &'static str,
+    profile: &'static str,
+    var: &'static str,
+    file: &'static str,
+    hint: &'static str,
+}
+
+const MUSL_HINT: &str = "rustup target add x86_64-unknown-linux-musl";
+const GNU_WIN_HINT: &str = "rustup target add x86_64-pc-windows-gnu and install mingw-w64";
+
+/// The stubs this host can build. The Linux GUI stub needs glibc (a static musl binary
+/// cannot load X11/Wayland), so only a Linux host builds it; Linux hosts cross-build the
+/// Windows stubs with mingw, which makes the Linux-built creator the complete one.
+fn stub_set() -> Vec<Stub> {
+    let s = |package, target, profile, var, file, hint| Stub { package, target, profile, var, file, hint };
+    if cfg!(windows) {
+        vec![
+            s("patcher-stub", WINDOWS, "release", "PATCHER_STUB_WINDOWS", "patcher-stub-windows.exe", ""),
+            s("patcher-stub-gui", WINDOWS, "gui-stub", "PATCHER_STUB_WINDOWS_GUI", "patcher-stub-gui-windows.exe", ""),
+            s("patcher-stub", LINUX, "release", "PATCHER_STUB_LINUX", "patcher-stub-linux", MUSL_HINT),
+        ]
+    } else {
+        vec![
+            s("patcher-stub", LINUX, "release", "PATCHER_STUB_LINUX", "patcher-stub-linux", MUSL_HINT),
+            s("patcher-stub-gui", LINUX_GNU, "gui-stub", "PATCHER_STUB_LINUX_GUI", "patcher-stub-gui-linux", "install the X11/Wayland development packages"),
+            s("patcher-stub", WINDOWS_GNU, "release", "PATCHER_STUB_WINDOWS", "patcher-stub-windows.exe", GNU_WIN_HINT),
+            s("patcher-stub-gui", WINDOWS_GNU, "gui-stub", "PATCHER_STUB_WINDOWS_GUI", "patcher-stub-gui-windows.exe", GNU_WIN_HINT),
+        ]
+    }
+}
+
+/// Builds this host's stubs and a creator with them embedded.
 fn dist(root: &Path) -> Result<()> {
     let target = root.join("target");
-    let stub = |t: &str| target.join(t).join("release").join(if t == WINDOWS { "patcher-stub.exe" } else { "patcher-stub" });
-    let mut envs: Vec<(&str, PathBuf)> = Vec::new();
-    for (t, var) in [(WINDOWS, "PATCHER_STUB_WINDOWS"), (LINUX, "PATCHER_STUB_LINUX")] {
-        match cargo(root, &["build", "--release", "-p", "patcher-stub", "--target", t], &[]) {
-            Ok(()) => envs.push((var, stub(t))),
-            Err(e) => eprintln!("warning: no {t} stub ({e}); install the target with `rustup target add {t}`"),
+    let mut built: Vec<(Stub, PathBuf)> = Vec::new();
+    for st in stub_set() {
+        let args = ["build", "--profile", st.profile, "-p", st.package, "--target", st.target];
+        match cargo(root, &args, &[]) {
+            Ok(()) => {
+                let exe = if st.target.contains("windows") { format!("{}.exe", st.package) } else { st.package.to_string() };
+                let path = target.join(st.target).join(st.profile).join(exe);
+                built.push((st, path));
+            }
+            Err(e) => eprintln!("warning: no {} for {} ({e}); {}", st.package, st.target, st.hint),
         }
     }
-    let env_refs: Vec<(&str, &Path)> = envs.iter().map(|(k, v)| (*k, v.as_path())).collect();
+    let env_refs: Vec<(&str, &Path)> = built.iter().map(|(st, p)| (st.var, p.as_path())).collect();
     cargo(root, &["build", "--release", "-p", "patcher-cli"], &env_refs)?;
 
     let dist = root.join("dist");
+    let _ = std::fs::remove_dir_all(dist.join("stubs"));
     std::fs::create_dir_all(dist.join("stubs"))?;
     let exe = if cfg!(windows) { "patcher.exe" } else { "patcher" };
     std::fs::copy(target.join("release").join(exe), dist.join(exe))?;
-    for (var, p) in &envs {
-        let name = if *var == "PATCHER_STUB_WINDOWS" { "patcher-stub-windows.exe" } else { "patcher-stub-linux" };
-        std::fs::copy(p, dist.join("stubs").join(name))?;
+    for (st, p) in &built {
+        std::fs::copy(p, dist.join("stubs").join(st.file))?;
     }
     for e in std::fs::read_dir(&dist)?.chain(std::fs::read_dir(dist.join("stubs"))?) {
         let e = e?;

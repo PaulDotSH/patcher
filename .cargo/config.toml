@@ -2,5 +2,9 @@
 # Self-contained musl CRT + the lld that ships with rustup: no Linux toolchain needed.
 linker = "rust-lld"
 
+# Linux hosts: Windows stubs cross-compile with mingw-w64.
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+
 [alias]
 xtask = "run --release --package xtask --"
