@@ -1,0 +1,37 @@
+import { Theme, Patcher, Strings } from "api.slint";
+import { Heading, Body, Button, Scroll } from "widgets.slint";
+
+export component ErrorScreen inherits Rectangle {
+    VerticalLayout {
+        padding-left: 44px;
+        padding-right: 44px;
+        padding-top: 14px;
+        spacing: 12px;
+        Heading {
+            text: Strings.error-heading;
+            color: Theme.bad;
+        }
+        Body { text: Patcher.error-text; }
+        if Patcher.error-details != "": Scroll {
+            vertical-stretch: 1;
+            content-height: details.preferred-height + 24px;
+            details := Text {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                text: Patcher.error-details;
+                font-family: Theme.font-mono;
+                font-size: 11px;
+                color: Theme.dim;
+                wrap: word-wrap;
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                text: Strings.copy-details;
+                clicked => { Patcher.copy-error(); }
+            }
+        }
+    }
+}

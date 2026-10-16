@@ -1,0 +1,20 @@
+// Always drawn on top of the layout, whatever the theme: it is the AGPL source offer.
+
+import { Theme, Patcher, Corner } from "api.slint";
+
+export component Credit inherits Rectangle {
+    property <bool> left: Theme.credit-position == Corner.bottom-left || Theme.credit-position == Corner.top-left;
+    property <bool> top: Theme.credit-position == Corner.top-left || Theme.credit-position == Corner.top-right;
+    label := Text {
+        x: root.left ? 18px : root.width - self.width - 18px;
+        y: root.top ? 12px : root.height - self.height - 14px;
+        text: "Made with patcher";
+        font-family: Theme.font-body;
+        font-size: 11px;
+        color: touch.has-hover ? Theme.accent : Theme.faint;
+        touch := TouchArea {
+            mouse-cursor: MouseCursor.pointer;
+            clicked => { Patcher.open-url("https://github.com/PaulDotSH/patcher"); }
+        }
+    }
+}

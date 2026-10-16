@@ -1,0 +1,58 @@
+import { Theme, Patcher, Strings } from "api.slint";
+import { Heading, Mono, ProgressBar, Scroll, Link } from "widgets.slint";
+
+export component ProgressScreen inherits Rectangle {
+    property <bool> show-log;
+    VerticalLayout {
+        padding-left: 44px;
+        padding-right: 44px;
+        padding-top: 14px;
+        spacing: 12px;
+        alignment: start;
+        HorizontalLayout {
+            Heading {
+                text: Patcher.reverting ? Strings.progress-heading-revert : Strings.progress-heading;
+                vertical-alignment: bottom;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: round(Patcher.progress * 100) + "%";
+                font-family: Theme.font-display;
+                font-size: 64px;
+                color: Theme.accent;
+                vertical-alignment: bottom;
+            }
+        }
+        ProgressBar {
+            value: Patcher.progress;
+            active: !Patcher.finishing;
+        }
+        HorizontalLayout {
+            spacing: 16px;
+            Mono {
+                text: Patcher.finishing ? Strings.finishing : Patcher.phase + (Patcher.current-file != "" ? "  " + Patcher.current-file : "");
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Mono {
+                text: Patcher.speed + (Patcher.eta != "" ? "   " + Patcher.eta : "");
+                horizontal-alignment: right;
+            }
+        }
+        if Patcher.log.length > 0: Link {
+            text: Strings.show-log;
+            font-size: 12px;
+            clicked => { root.show-log = !root.show-log; }
+        }
+        if root.show-log: Scroll {
+            height: 110px;
+            content-height: lines.preferred-height + 16px;
+            lines := VerticalLayout {
+                x: 10px;
+                y: 8px;
+                width: parent.width - 20px;
+                for line in Patcher.log: Mono { text: line; }
+            }
+        }
+    }
+}

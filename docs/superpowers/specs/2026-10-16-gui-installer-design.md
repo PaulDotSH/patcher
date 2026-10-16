@@ -154,7 +154,7 @@ linux = "game.sh"
 steam_app_id = 0            # when set, Launch opens steam://rungameid/<id> instead
 
 [credit]
-position = "bottom-right"   # bottom-right | bottom-left | top-right | top-left
+position = "bottom-left"    # bottom-left | bottom-right | top-left | top-right (buttons sit bottom right)
 
 [strings]                   # any built-in string by key, see docs/gui.md
 patch_button = "Install"

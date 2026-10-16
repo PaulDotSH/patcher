@@ -1,0 +1,23 @@
+// The built-in window content. `[layout] installer` replaces this whole component;
+// `[layout.parts]` replace the parts it imports from "@parts".
+
+import { Patcher, Screen } from "api.slint";
+import { TitleBar, Background, WelcomeScreen, LicenseScreen, FolderScreen, OptionsScreen, ProgressScreen, DoneScreen, ErrorScreen, NavButtons } from "@parts";
+
+export component Installer inherits Rectangle {
+    Background { }
+    VerticalLayout {
+        TitleBar { }
+        Rectangle {
+            vertical-stretch: 1;
+            if Patcher.screen == Screen.welcome: WelcomeScreen { }
+            if Patcher.screen == Screen.license: LicenseScreen { }
+            if Patcher.screen == Screen.folder: FolderScreen { }
+            if Patcher.screen == Screen.options: OptionsScreen { }
+            if Patcher.screen == Screen.progress: ProgressScreen { }
+            if Patcher.screen == Screen.done: DoneScreen { }
+            if Patcher.screen == Screen.error: ErrorScreen { }
+        }
+        NavButtons { }
+    }
+}

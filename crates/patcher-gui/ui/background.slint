@@ -1,0 +1,37 @@
+import { Theme, Patcher, BackgroundKind } from "api.slint";
+
+export component Background inherits Rectangle {
+    background: Theme.bg;
+    clip: true;
+    property <angle> turn: Patcher.tick / 12000ms * 360deg;
+
+    if Theme.background == BackgroundKind.glow: Rectangle {
+        width: root.width * 1.2;
+        height: root.height * 1.6;
+        x: root.width * 0.3 + root.width * 0.08 * sin(root.turn);
+        y: root.height * -0.1 + root.height * 0.08 * cos(root.turn * 0.7);
+        background: @radial-gradient(circle, Theme.accent.with-alpha(0.14) 0%, Theme.accent.with-alpha(0.05) 35%, Theme.accent.with-alpha(0) 68%);
+    }
+    if Theme.background == BackgroundKind.grid: Rectangle {
+        property <length> cell: 32px;
+        property <length> shift: mod(Patcher.tick / 120ms, 32) * 1px;
+        for i in ceil(root.width / 32px) + 2: Rectangle {
+            x: i * parent.cell - parent.shift;
+            width: 1px;
+            height: root.height;
+            background: Theme.border.with-alpha(0.6);
+        }
+        for j in ceil(root.height / 32px) + 2: Rectangle {
+            y: j * parent.cell - parent.shift;
+            height: 1px;
+            width: root.width;
+            background: Theme.border.with-alpha(0.6);
+        }
+    }
+    if Theme.background == BackgroundKind.image: Image {
+        width: root.width;
+        height: root.height;
+        source: Theme.background-image;
+        image-fit: cover;
+    }
+}

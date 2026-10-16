@@ -1,0 +1,33 @@
+import { Theme, Patcher, Strings } from "api.slint";
+import { Body, Button, Tag } from "widgets.slint";
+
+export component DoneScreen inherits Rectangle {
+    VerticalLayout {
+        padding-left: 44px;
+        padding-right: 44px;
+        padding-top: 18px;
+        spacing: 18px;
+        alignment: start;
+        HorizontalLayout {
+            alignment: start;
+            Tag {
+                text: Strings.done-heading;
+                font-size: 56px;
+            }
+        }
+        Body { text: Patcher.result; }
+        HorizontalLayout {
+            spacing: 14px;
+            alignment: start;
+            Button {
+                text: Strings.open-folder;
+                clicked => { Patcher.open-folder(); }
+            }
+            if Patcher.can-launch: Button {
+                text: Strings.launch;
+                primary: true;
+                clicked => { Patcher.launch(); }
+            }
+        }
+    }
+}

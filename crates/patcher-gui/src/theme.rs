@@ -39,8 +39,8 @@ pub enum Background {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Corner {
-    #[default]
     BottomRight,
+    #[default]
     BottomLeft,
     TopRight,
     TopLeft,
@@ -216,8 +216,7 @@ impl Theme {
         let text = std::fs::read_to_string(path).map_err(|e| err(e.to_string()))?;
         let file: ThemeFile = toml::from_str(&text).map_err(|e| err(e.to_string().trim_end().to_string()))?;
         let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
-        let dir = std::fs::canonicalize(if dir.as_os_str().is_empty() { Path::new(".") } else { &dir })
-            .map_err(|e| err(e.to_string()))?;
+        let dir = canonical(if dir.as_os_str().is_empty() { Path::new(".") } else { &dir }).map_err(|e| err(e.to_string()))?;
         Theme::from_file(file, dir, path.to_path_buf()).map_err(err)
     }
 
@@ -301,6 +300,19 @@ impl Theme {
     /// Program to launch for this OS, relative to the game folder.
     pub fn launch_program(&self) -> Option<&str> {
         if cfg!(windows) { self.file.launch.windows.as_deref() } else { self.file.launch.linux.as_deref() }
+    }
+}
+
+/// `fs::canonicalize` without Windows' `\\?\` prefix, which `.slint` imports do not accept.
+/// Used for every path handed to the Slint compiler, so one file never appears under two
+/// names (a short `TEMPAD~1` path and its long form would load a file twice and split its
+/// globals).
+pub fn canonical(p: &Path) -> std::io::Result<PathBuf> {
+    let c = std::fs::canonicalize(p)?;
+    let s = c.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => Ok(PathBuf::from(rest)),
+        _ => Ok(c),
     }
 }
 

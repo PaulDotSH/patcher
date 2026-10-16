@@ -1,0 +1,52 @@
+import { Theme, Patcher, Strings } from "api.slint";
+import { Wordmark, Body, Small, Link, Checkbox, Button } from "widgets.slint";
+
+export component WelcomeScreen inherits Rectangle {
+    VerticalLayout {
+        padding-left: 44px;
+        padding-right: 44px;
+        padding-top: 18px;
+        spacing: 14px;
+        alignment: start;
+        Wordmark { }
+        if Patcher.byline != "": Small { text: Patcher.byline; }
+        if Patcher.mod-description != "": Body {
+            text: Patcher.mod-description;
+            color: Theme.dim;
+        }
+        if Patcher.mod-url != "": Link {
+            text: Patcher.mod-url;
+            clicked => { Patcher.open-url(Patcher.mod-url); }
+        }
+        if Patcher.options-merged && !Patcher.can-revert: Rectangle {
+            height: 34px;
+            Checkbox {
+                y: 12px;
+                height: 22px;
+                text: Strings.backup-label;
+                checked: Patcher.backup;
+                toggled(v) => { Patcher.set-backup(v); }
+            }
+        }
+        if Patcher.can-revert: Rectangle {
+            height: row.preferred-height;
+            border-radius: Theme.radius;
+            background: Theme.panel;
+            border-width: 1px;
+            border-color: Theme.border;
+            row := HorizontalLayout {
+                padding: 14px;
+                spacing: 16px;
+                Body {
+                    text: Strings.revert-offer;
+                    vertical-alignment: center;
+                    font-size: 13px;
+                }
+                Button {
+                    text: Strings.revert;
+                    clicked => { Patcher.revert(); }
+                }
+            }
+        }
+    }
+}

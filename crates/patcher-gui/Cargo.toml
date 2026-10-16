@@ -13,6 +13,8 @@ pack = ["dep:zstd"]
 bitcode.workspace = true
 patcher-core.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
+slint-interpreter = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2"] }
+spin_on = "0.1"
 thiserror.workspace = true
 toml = "1.1.8"
 ttf-parser = "0.25.1"

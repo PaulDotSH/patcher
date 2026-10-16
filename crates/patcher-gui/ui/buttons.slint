@@ -1,0 +1,35 @@
+import { Theme, Patcher, Strings, Screen } from "api.slint";
+import { Button } from "widgets.slint";
+
+// The bottom row: Back / Next, Cancel while working, Close at the end.
+export component NavButtons inherits Rectangle {
+    height: 76px;
+    property <bool> wizard: Patcher.screen != Screen.progress && Patcher.screen != Screen.done && Patcher.screen != Screen.error;
+    HorizontalLayout {
+        padding-left: 44px;
+        padding-right: 44px;
+        padding-bottom: 22px;
+        spacing: 14px;
+        alignment: end;
+        if Patcher.screen == Screen.progress: Button {
+            text: Patcher.finishing ? Strings.finishing : Strings.cancel;
+            enabled: Patcher.can-cancel;
+            clicked => { Patcher.cancel(); }
+        }
+        if Patcher.screen == Screen.done || Patcher.screen == Screen.error: Button {
+            text: Strings.close;
+            primary: true;
+            clicked => { Patcher.close(); }
+        }
+        if root.wizard && Patcher.can-back: Button {
+            text: Strings.back;
+            clicked => { Patcher.back(); }
+        }
+        if root.wizard: Button {
+            text: Patcher.next-label;
+            primary: true;
+            enabled: Patcher.can-next;
+            clicked => { Patcher.next(); }
+        }
+    }
+}

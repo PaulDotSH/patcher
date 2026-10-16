@@ -1,0 +1,18 @@
+import { Theme, Patcher, Strings } from "api.slint";
+import { Heading, Checkbox } from "widgets.slint";
+
+export component OptionsScreen inherits Rectangle {
+    VerticalLayout {
+        padding-left: 44px;
+        padding-right: 44px;
+        padding-top: 14px;
+        spacing: 18px;
+        alignment: start;
+        Heading { text: Strings.options-heading; }
+        Checkbox {
+            text: Strings.backup-label;
+            checked: Patcher.backup;
+            toggled(v) => { Patcher.set-backup(v); }
+        }
+    }
+}

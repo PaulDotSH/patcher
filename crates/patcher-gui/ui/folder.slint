@@ -1,0 +1,42 @@
+import { Theme, Patcher, Strings, BaseStatus } from "api.slint";
+import { Heading, Body, Small, Field, Button, Status } from "widgets.slint";
+
+export component FolderScreen inherits Rectangle {
+    VerticalLayout {
+        padding-left: 44px;
+        padding-right: 44px;
+        padding-top: 14px;
+        spacing: 14px;
+        alignment: start;
+        Heading { text: Strings.folder-heading; }
+        Small { text: Strings.folder-hint; }
+        HorizontalLayout {
+            spacing: 12px;
+            Field {
+                horizontal-stretch: 1;
+                text <=> Patcher.game-path;
+                edited(t) => { Patcher.set-game-path(t); }
+            }
+            if Patcher.can-browse: Button {
+                text: Strings.browse;
+                clicked => { Patcher.browse(); }
+            }
+        }
+        Status {
+            dot: Patcher.base-status == BaseStatus.ok ? Theme.ok
+                : Patcher.base-status == BaseStatus.already-applied ? Theme.warn
+                : Patcher.base-status == BaseStatus.checking || Patcher.base-status == BaseStatus.unknown ? Theme.faint
+                : Theme.bad;
+            text: Patcher.base-status == BaseStatus.ok ? Strings.status-ok
+                : Patcher.base-status == BaseStatus.already-applied ? Strings.status-already
+                : Patcher.base-status == BaseStatus.mismatch ? Strings.status-mismatch
+                : Patcher.base-status == BaseStatus.not-found ? Strings.status-not-found
+                : Strings.status-checking;
+            detail: Patcher.base-detail;
+        }
+        if Patcher.folder-error != "": Body {
+            text: Patcher.folder-error;
+            color: Theme.bad;
+        }
+    }
+}

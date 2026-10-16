@@ -1,0 +1,351 @@
+// Building blocks of the built-in layout. Custom layouts can import them from "@patcher".
+//
+// The software renderer draws no rotation and no drop shadows, so the tilted tag is a
+// tilted path and "shadows" are black shapes drawn behind, offset down-right.
+
+import { Theme, Patcher } from "api.slint";
+
+// The word in the tilted accent box, as on trap.foarte.top.
+export component Tag inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size: 48px;
+    property <float> w: self.width / 1px;
+    property <float> h: self.height / 1px;
+    // A rectangle turned by about -3 degrees, drawn as a parallelogram.
+    property <float> d: self.w * 0.0524;
+    property <float> s: self.h * 0.0524;
+    property <string> outline: "M 0 " + self.d + " L " + (self.w - self.s) + " 0 L " + self.w + " " + (self.h - self.d) + " L " + self.s + " " + self.h + " Z";
+    width: label.preferred-width + root.font-size * 0.42;
+    height: label.preferred-height + root.font-size * 0.12;
+
+    if Theme.shadows: Path {
+        x: root.font-size * 0.07;
+        y: root.font-size * 0.07;
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.w;
+        viewbox-height: root.h;
+        commands: root.outline;
+        fill: #000;
+    }
+    Path {
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.w;
+        viewbox-height: root.h;
+        commands: root.outline;
+        fill: Theme.accent;
+    }
+    label := Text {
+        text: root.text;
+        font-family: Theme.font-display;
+        font-size: root.font-size;
+        color: Theme.accent-ink;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// The mod's name in display type, or its logo.
+export component Wordmark inherits Rectangle {
+    in property <length> font-size: 60px;
+    height: Theme.has-logo ? root.font-size * 1.4 : row.preferred-height;
+    if Theme.has-logo: Image {
+        x: 0;
+        height: root.height;
+        source: Theme.logo;
+        image-fit: contain;
+        horizontal-alignment: left;
+    }
+    row := HorizontalLayout {
+        visible: !Theme.has-logo;
+        alignment: start;
+        spacing: root.font-size * 0.16;
+        if Theme.wordmark != "": Text {
+            text: Theme.wordmark;
+            font-family: Theme.font-display;
+            font-size: root.font-size;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+        if Theme.tag != "": Tag {
+            text: Theme.tag;
+            font-size: root.font-size;
+        }
+    }
+}
+
+export component Heading inherits Text {
+    font-family: Theme.font-display;
+    font-size: 30px;
+    color: Theme.text;
+}
+
+export component Body inherits Text {
+    font-family: Theme.font-body;
+    font-size: 14px;
+    color: Theme.text;
+    wrap: word-wrap;
+}
+
+export component Small inherits Text {
+    font-family: Theme.font-body;
+    font-size: 12px;
+    color: Theme.dim;
+}
+
+export component Mono inherits Text {
+    font-family: Theme.font-mono;
+    font-size: 12px;
+    color: Theme.dim;
+    overflow: elide;
+}
+
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> enabled: true;
+    callback clicked();
+    property <bool> down: touch.pressed && root.enabled;
+    property <length> lift: Theme.shadows ? 4px : 0px;
+    min-width: max(108px, label.preferred-width + 40px);
+    height: 40px;
+
+    if Theme.shadows && root.enabled: Rectangle {
+        x: root.lift;
+        y: root.lift;
+        width: root.width;
+        height: root.height;
+        border-radius: Theme.radius;
+        background: #000;
+    }
+    Rectangle {
+        x: root.down ? root.lift / 2 : 0px;
+        y: root.down ? root.lift / 2 : 0px;
+        width: root.width;
+        height: root.height;
+        border-radius: Theme.radius;
+        background: !root.enabled ? Theme.panel
+            : root.primary ? (touch.has-hover ? Theme.accent.brighter(0.12) : Theme.accent)
+            : (touch.has-hover ? Theme.raised.brighter(0.25) : Theme.raised);
+        border-width: root.primary && root.enabled ? 0px : 1px;
+        border-color: touch.has-hover && root.enabled ? Theme.border-hover : Theme.border;
+        label := Text {
+            text: root.text;
+            font-family: Theme.font-display;
+            font-size: 17px;
+            letter-spacing: 0.5px;
+            color: !root.enabled ? Theme.faint : root.primary ? Theme.accent-ink : Theme.text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Window control in the title bar.
+export component IconButton inherits Rectangle {
+    in property <string> icon;   // "minimize" or "close"
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 40px;
+    height: 30px;
+    border-radius: Theme.radius;
+    background: !touch.has-hover || !root.enabled ? transparent : root.icon == "close" ? Theme.bad : Theme.raised;
+    Path {
+        width: 10px;
+        height: 10px;
+        viewbox-width: 10;
+        viewbox-height: 10;
+        commands: root.icon == "close" ? "M 0 0 L 10 10 M 10 0 L 0 10" : "M 0 5 L 10 5";
+        stroke: !root.enabled ? Theme.faint : touch.has-hover && root.icon == "close" ? #fff : Theme.dim;
+        stroke-width: 1.4px;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component Checkbox inherits Rectangle {
+    in property <string> text;
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled(bool);
+    height: max(22px, label.preferred-height);
+    HorizontalLayout {
+        spacing: 10px;
+        alignment: start;
+        Rectangle {
+            width: 20px;
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 4px;
+            border-width: root.checked ? 0px : 1px;
+            border-color: touch.has-hover ? Theme.border-hover : Theme.border;
+            background: root.checked ? Theme.accent : Theme.panel;
+            if root.checked: Path {
+                width: 12px;
+                height: 12px;
+                viewbox-width: 12;
+                viewbox-height: 12;
+                commands: "M 1 6 L 5 10 L 11 2";
+                stroke: Theme.accent-ink;
+                stroke-width: 2px;
+            }
+        }
+        label := Text {
+            text: root.text;
+            font-family: Theme.font-body;
+            font-size: 14px;
+            color: root.enabled ? Theme.text : Theme.faint;
+            vertical-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.toggled(!root.checked); }
+    }
+}
+
+// A one-line text field (the game folder).
+export component Field inherits Rectangle {
+    in-out property <string> text;
+    callback edited(string);
+    height: 40px;
+    border-radius: Theme.radius;
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent : touch.has-hover ? Theme.border-hover : Theme.border;
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.text;
+        clicked => { input.focus(); }
+    }
+    input := TextInput {
+        x: 12px;
+        width: root.width - 24px;
+        height: root.height;
+        text <=> root.text;
+        font-family: Theme.font-mono;
+        font-size: 13px;
+        color: Theme.text;
+        selection-background-color: Theme.accent-glow;
+        selection-foreground-color: Theme.text;
+        vertical-alignment: center;
+        single-line: true;
+        edited => { root.edited(self.text); }
+    }
+}
+
+// Scrollable panel for long text (license, error details, log).
+export component Scroll inherits Rectangle {
+    in property <length> content-height;
+    border-radius: Theme.radius;
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+    flick := Flickable {
+        x: 1px;
+        y: 1px;
+        width: root.width - 2px;
+        height: root.height - 2px;
+        viewport-height: max(self.height, root.content-height);
+        @children
+    }
+    if root.content-height > flick.height: Rectangle {
+        x: root.width - 6px;
+        width: 3px;
+        border-radius: 2px;
+        background: Theme.border-hover;
+        height: max(24px, flick.height * flick.height / root.content-height);
+        y: -flick.viewport-y / (root.content-height - flick.height) * (flick.height - self.height);
+    }
+}
+
+export component Link inherits Text {
+    callback clicked();
+    font-family: Theme.font-body;
+    font-size: 13px;
+    color: touch.has-hover ? Theme.accent.brighter(0.2) : Theme.accent;
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component ProgressBar inherits Rectangle {
+    in property <float> value;
+    in property <bool> active: true;
+    height: 14px;
+    border-radius: self.height / 2;
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: Theme.border;
+    // Glow around the filled part.
+    Rectangle {
+        x: -3px;
+        y: -3px;
+        width: fill.width + 6px;
+        height: root.height + 6px;
+        border-radius: self.height / 2;
+        background: Theme.accent-soft;
+        visible: root.value > 0;
+    }
+    fill := Rectangle {
+        width: max(root.height, root.width * clamp(root.value, 0, 1));
+        visible: root.value > 0;
+        border-radius: root.height / 2;
+        background: Theme.accent;
+        clip: true;
+        if root.active: Rectangle {
+            property <length> span: 90px;
+            width: self.span;
+            x: mod(Patcher.tick / 1400ms, 1) * (fill.width + self.span) - self.span;
+            background: @linear-gradient(90deg, Theme.accent.with-alpha(0) 0%, #ffffff66 50%, Theme.accent.with-alpha(0) 100%);
+        }
+    }
+}
+
+// A coloured dot and a line of text.
+export component Status inherits Rectangle {
+    in property <color> dot;
+    in property <string> text;
+    in property <string> detail;
+    height: col.preferred-height;
+    col := VerticalLayout {
+        spacing: 4px;
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            Rectangle {
+                width: 10px;
+                height: 10px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 5px;
+                background: root.dot;
+            }
+            Text {
+                text: root.text;
+                font-family: Theme.font-body;
+                font-weight: 600;
+                font-size: 14px;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+        }
+        if root.detail != "": Text {
+            text: root.detail;
+            font-family: Theme.font-mono;
+            font-size: 12px;
+            color: Theme.dim;
+            wrap: word-wrap;
+        }
+    }
+}

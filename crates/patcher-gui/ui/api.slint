@@ -1,0 +1,110 @@
+// The contract between the patcher and any layout, built-in or custom.
+// Rust owns every value here: layouts read properties and call callbacks.
+
+export enum Screen { welcome, license, folder, options, progress, done, error }
+export enum BaseStatus { unknown, checking, ok, already-applied, mismatch, not-found }
+export enum BackgroundKind { glow, grid, image, none }
+export enum Corner { bottom-left, bottom-right, top-left, top-right }
+
+export global Theme {
+    // Colours (see docs/gui.md for how they are derived).
+    in property <color> bg: #0b0b0c;
+    in property <color> panel: #141416;
+    in property <color> raised: #1b1b1f;
+    in property <color> border: #26262b;
+    in property <color> border-hover: #3a3a42;
+    in property <color> text: #f3f3ee;
+    in property <color> dim: #a6a69e;
+    in property <color> faint: #6e6e68;
+    in property <color> accent: #c6ff3d;
+    in property <color> accent-ink: #0b0b0c;
+    in property <color> accent-soft: #c6ff3d1a;
+    in property <color> accent-glow: #c6ff3d59;
+    in property <color> ok: #c6ff3d;
+    in property <color> bad: #ff5b4f;
+    in property <color> warn: #ffc53d;
+
+    in property <string> font-display: "Anton";
+    in property <string> font-body: "Inter";
+    in property <string> font-mono: "JetBrains Mono";
+    in property <length> radius: 6px;
+    in property <bool> shadows: true;
+
+    in property <BackgroundKind> background: BackgroundKind.glow;
+    in property <image> background-image;
+    in property <image> window-icon;
+    in property <image> logo;
+    in property <bool> has-logo;
+    // The wordmark is drawn as `wordmark` followed by `tag` in the tilted accent box.
+    in property <string> wordmark: "";
+    in property <string> tag: "PATCHER";
+    in property <Corner> credit-position: Corner.bottom-left;
+}
+
+export global Strings {
+    // STRINGS
+}
+
+export global Patcher {
+    in property <Screen> screen: Screen.welcome;
+
+    in property <string> mod-name: "patcher";
+    in property <string> mod-version;
+    in property <string> mod-description;
+    in property <string> mod-url;
+    in property <string> byline;               // "Version 1.0 · by someone"
+
+    in property <bool> options-merged;         // backup option shown on the welcome screen
+    in property <bool> backup: true;
+    in property <bool> can-revert;             // a backup from this patch exists
+    in property <bool> reverting;              // the progress screen is removing the mod
+
+    in property <string> license-text;
+    in property <bool> require-accept;
+    in property <bool> license-accepted;
+
+    in-out property <string> game-path;
+    in property <BaseStatus> base-status: BaseStatus.unknown;
+    in property <string> base-detail;
+    in property <bool> can-browse: true;
+    in property <string> folder-error;
+
+    in property <float> progress;              // 0..1 over all phases
+    in property <string> phase;
+    in property <string> current-file;
+    in property <string> speed;
+    in property <string> eta;
+    in property <[string]> log;
+    in property <bool> can-cancel;
+    in property <bool> finishing;              // commit running: no cancel, no close
+
+    in property <string> result;
+    in property <bool> can-launch;
+    in property <string> error-text;
+    in property <string> error-details;
+
+    in property <bool> can-back;
+    in property <bool> can-next;
+    in property <string> next-label: "Next";
+    in property <bool> can-close: true;
+
+    // Drives animation; advanced by the patcher at up to 30 fps, paused when hidden.
+    in property <duration> tick;
+
+    callback next();
+    callback back();
+    callback set-game-path(string);
+    callback browse();
+    callback set-backup(bool);
+    callback accept-license(bool);
+    callback start();
+    callback cancel();
+    callback revert();
+    callback launch();
+    callback open-folder();
+    callback open-url(string);
+    callback copy-error();
+    callback minimize();
+    callback close();
+    callback drag-window();
+}
