@@ -21,7 +21,7 @@ use rayon::prelude::*;
 
 use crate::format::{validate_rel_path, Check, Codec, Comp, Index, Source};
 use crate::hash::{self, Mapped};
-use crate::progress::Progress;
+use crate::progress::{Phase, Progress};
 use crate::sys::{self, Budget};
 use crate::{codec, paths, Error, IoContext, Patch, Result};
 
@@ -70,6 +70,21 @@ struct Manifest {
 struct BaseFiles {
     paths: Vec<PathBuf>,
     maps: Vec<Mapped>,
+}
+
+/// What each apply phase will report to `Progress`: bytes read while verifying, bytes
+/// written while decoding, and operations while committing.
+pub fn phase_totals(patch: &Patch) -> [(Phase, u64); 3] {
+    let idx = &patch.index;
+    [
+        (Phase::Verify, idx.base_files.iter().map(|b| b.check.size).sum()),
+        (Phase::Decode, idx.writes.iter().map(|w| w.check.size).sum()),
+        (Phase::Commit, commit_ops(idx)),
+    ]
+}
+
+fn commit_ops(idx: &Index) -> u64 {
+    (idx.writes.len() + idx.deletes.len() + idx.dirs_remove.len() + idx.dirs_create.len()) as u64
 }
 
 /// Reports whether `patch` can be applied to `game`, is already applied, or neither.
@@ -149,7 +164,7 @@ pub fn revert(game: &Path, progress: &dyn Progress) -> Result<(String, usize)> {
     for p in man.added.iter().chain(&man.replaced).chain(&man.dirs_created).chain(&man.dirs_removed) {
         validate_rel_path(p)?;
     }
-    progress.begin("Reverting", (man.added.len() + man.replaced.len()) as u64);
+    progress.begin(Phase::Revert, (man.added.len() + man.replaced.len()) as u64);
     for a in &man.added {
         let p = paths::join(game, a);
         match fs::remove_file(&p) {
@@ -203,11 +218,12 @@ fn verify_base(idx: &Index, game: &Path, progress: &dyn Progress) -> Result<Resu
         return Ok(Err(problems));
     }
     let total = idx.base_files.iter().map(|b| b.check.size).sum();
-    progress.begin("Verifying game files", total);
+    progress.begin(Phase::Verify, total);
     let checked: Vec<Result<(Mapped, bool)>> = paths_
         .par_iter()
         .zip(&idx.base_files)
         .map(|(p, b)| {
+            progress.file(&b.path);
             let m = Mapped::open(p)?;
             let ok = hash::matches(&b.check, &m);
             progress.inc(b.check.size);
@@ -263,7 +279,7 @@ fn is_patched(idx: &Index, game: &Path) -> Result<bool> {
 fn stage(patch: &Patch, maps: &[Mapped], staging: &Path, progress: &dyn Progress) -> Result<()> {
     let idx = &patch.index;
     let total = idx.writes.iter().map(|w| w.check.size).sum();
-    progress.begin("Patching", total);
+    progress.begin(Phase::Decode, total);
     let budget = Budget::new((sys::total_memory() / 2).max(512 << 20));
 
     enum Job {
@@ -295,6 +311,7 @@ fn stage(patch: &Patch, maps: &[Mapped], staging: &Path, progress: &dyn Progress
             let data = codec::decompress(group.comp, patch.blob(group.blob)?, None, group.len as usize)?;
             members.par_iter().try_for_each(|&i| {
                 let w = &idx.writes[i];
+                progress.file(&w.path);
                 let Source::Solid { offset, .. } = w.source else { unreachable!() };
                 let slice = &data[offset as usize..(offset + w.check.size) as usize];
                 let path = staging.join(i.to_string());
@@ -317,6 +334,7 @@ fn stage_single(
     progress: &dyn Progress,
 ) -> Result<()> {
     let w = &patch.index.writes[i];
+    progress.file(&w.path);
     let path = staging.join(i.to_string());
     let mut out = BufWriter::with_capacity(1 << 20, File::create(&path).at(&path)?);
     let mut hasher = hash::Hasher::new(w.check.blake3.is_some());
@@ -442,6 +460,8 @@ fn commit(patch: &Patch, game: &Path, base_paths: &[PathBuf], staging: &Path, op
         write_manifest(&backup_root, &man)?;
     }
 
+    let progress = opts.progress;
+    progress.begin(Phase::Commit, commit_ops(idx));
     let mut undo = Vec::new();
     let mut created = Vec::new();
     let result = (|| -> Result<()> {
@@ -460,10 +480,12 @@ fn commit(patch: &Patch, game: &Path, base_paths: &[PathBuf], staging: &Path, op
                 }
             }
         }
+        progress.inc(idx.deletes.len() as u64);
 
         let mut remove: Vec<&String> = idx.dirs_remove.iter().collect();
         remove.sort_by_key(|d| Reverse(d.matches('/').count()));
         for d in remove {
+            progress.inc(1);
             if let Some(p) = paths::resolve_existing(game, d)?
                 && p.is_dir()
                 && fs::remove_dir(&p).is_ok()
@@ -488,7 +510,9 @@ fn commit(patch: &Patch, game: &Path, base_paths: &[PathBuf], staging: &Path, op
             .map(|(i, (((path, _), w), mode))| {
                 let staged = staging.join(i.to_string());
                 set_mode(&staged, w.exec, *mode)?;
-                rename(&staged, path)
+                let r = rename(&staged, path);
+                progress.inc(1);
+                r
             })
             .collect();
         let mut first_err = None;
@@ -506,6 +530,7 @@ fn commit(patch: &Patch, game: &Path, base_paths: &[PathBuf], staging: &Path, op
         }
 
         for d in &idx.dirs_create {
+            progress.inc(1);
             let n = created.len();
             ensure_dir(&paths::resolve_for_write(game, d)?, &mut created)?;
             undo.extend(created[n..].iter().cloned().map(Undo::CreatedDir));
@@ -537,6 +562,7 @@ fn commit(patch: &Patch, game: &Path, base_paths: &[PathBuf], staging: &Path, op
         return Err(e);
     }
 
+    progress.end();
     man.dirs_created = created.iter().map(|d| paths::to_rel(game, d)).collect();
     if opts.backup {
         write_manifest(&backup_root, &man)?;

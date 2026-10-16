@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use patcher_core::format::{Footer, Meta};
-use patcher_core::progress::Silent;
+use patcher_core::progress::{Phase, Progress, Silent};
 use patcher_core::{ApplyOptions, Error, GameState, Patch};
 use patcher_create::{CreateOptions, Preset};
 use patcher_testgen::{copy_tree, tree_listing, Corpus};
@@ -71,6 +71,47 @@ fn roundtrip(scenario: usize, preset: Preset, strong: bool) {
 fn every_scenario_balanced() {
     for i in 0..corpus().1.scenarios.len() {
         roundtrip(i, Preset::Balanced, true);
+    }
+}
+
+/// Records every phase's declared total and the sum of its increments.
+#[derive(Default)]
+struct Recorder {
+    phases: std::sync::Mutex<Vec<(Phase, u64, u64)>>,
+    files: std::sync::atomic::AtomicUsize,
+}
+
+impl Progress for Recorder {
+    fn begin(&self, phase: Phase, total: u64) {
+        self.phases.lock().unwrap().push((phase, total, 0));
+    }
+    fn inc(&self, n: u64) {
+        self.phases.lock().unwrap().last_mut().unwrap().2 += n;
+    }
+    fn end(&self) {}
+    fn file(&self, _: &str) {
+        self.files.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[test]
+fn progress_matches_phase_totals() {
+    let (root, c) = corpus();
+    for sc in &c.scenarios {
+        let patch_path = root.join(format!("{}-progress.patch", sc.name));
+        patcher_create::create(&opts(&c.base, &sc.modded, Preset::Fast, false), &patch_path, &Silent).unwrap();
+        let patch = Patch::open(&patch_path).unwrap();
+        let game = fresh_game(&format!("{}-progress", sc.name));
+        let rec = Recorder::default();
+        patcher_core::apply(&patch, &game, &ApplyOptions { backup: true, progress: &rec }).unwrap();
+        let seen: Vec<(Phase, u64)> = rec.phases.lock().unwrap().iter().map(|&(p, t, _)| (p, t)).collect();
+        assert_eq!(seen, patcher_core::phase_totals(&patch).to_vec(), "{}: declared totals", sc.name);
+        for &(p, t, sum) in rec.phases.lock().unwrap().iter() {
+            assert_eq!(sum, t, "{}: {p:?} increments", sc.name);
+        }
+        let files = patch.index.base_files.len() + patch.index.writes.len();
+        assert_eq!(rec.files.load(std::sync::atomic::Ordering::Relaxed), files, "{}: file calls", sc.name);
+        std::fs::remove_dir_all(&game).unwrap();
     }
 }
 

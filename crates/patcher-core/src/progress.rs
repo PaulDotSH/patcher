@@ -1,28 +1,65 @@
-//! Progress reporting hooks (console now, a GUI can implement the same trait later).
+//! Progress reporting hooks, implemented by the console and the GUI.
 
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+/// What a run of `begin` .. `end` measures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Phase {
+    /// Creator: hashing both trees (bytes).
+    Hash,
+    /// Creator: encoding changed files (bytes).
+    Encode,
+    /// Apply: checking the game's base files (bytes).
+    Verify,
+    /// Apply: decoding outputs into staging (bytes).
+    Decode,
+    /// Apply: moving files into place (operations).
+    Commit,
+    /// Revert: restoring files (operations).
+    Revert,
+}
+
+impl Phase {
+    pub fn label(self) -> &'static str {
+        match self {
+            Phase::Hash => "Hashing",
+            Phase::Encode => "Encoding",
+            Phase::Verify => "Verifying game files",
+            Phase::Decode => "Patching",
+            Phase::Commit => "Installing",
+            Phase::Revert => "Reverting",
+        }
+    }
+
+    /// Whether the phase counts bytes (otherwise operations).
+    pub fn is_bytes(self) -> bool {
+        !matches!(self, Phase::Commit | Phase::Revert)
+    }
+}
+
 pub trait Progress: Sync {
-    /// Starts a phase measured in `total` units (bytes).
-    fn begin(&self, label: &str, total: u64);
+    /// Starts a phase measured in `total` units (bytes or operations, see [`Phase`]).
+    fn begin(&self, phase: Phase, total: u64);
     fn inc(&self, n: u64);
     fn end(&self);
+    /// The file a worker starts on (called from several threads at once).
+    fn file(&self, _path: &str) {}
     fn note(&self, _msg: &str) {}
 }
 
 pub struct Silent;
 
 impl Progress for Silent {
-    fn begin(&self, _: &str, _: u64) {}
+    fn begin(&self, _: Phase, _: u64) {}
     fn inc(&self, _: u64) {}
     fn end(&self) {}
 }
 
-struct Phase {
-    label: String,
+struct Current {
+    phase: Phase,
     total: u64,
     started: Instant,
     drawn: Instant,
@@ -31,7 +68,7 @@ struct Phase {
 /// Single-line progress on stderr, redrawn at most every 100 ms.
 pub struct Console {
     done: AtomicU64,
-    phase: Mutex<Phase>,
+    phase: Mutex<Current>,
 }
 
 impl Default for Console {
@@ -39,22 +76,23 @@ impl Default for Console {
         let now = Instant::now();
         Console {
             done: AtomicU64::new(0),
-            phase: Mutex::new(Phase { label: String::new(), total: 0, started: now, drawn: now }),
+            phase: Mutex::new(Current { phase: Phase::Verify, total: 0, started: now, drawn: now }),
         }
     }
 }
 
 impl Console {
-    fn draw(&self, p: &Phase, newline: bool) {
+    fn draw(&self, p: &Current, newline: bool) {
         let done = self.done.load(Ordering::Relaxed).min(p.total);
         let pct = if p.total == 0 { 100.0 } else { done as f64 * 100.0 / p.total as f64 };
+        let amount = |n| if p.phase.is_bytes() { human_bytes(n) } else { n.to_string() };
         let mut err = std::io::stderr().lock();
         let _ = write!(
             err,
             "\r{}: {pct:5.1}%  {} / {}  [{:.1}s]   ",
-            p.label,
-            human_bytes(done),
-            human_bytes(p.total),
+            p.phase.label(),
+            amount(done),
+            amount(p.total),
             p.started.elapsed().as_secs_f64()
         );
         if newline {
@@ -65,11 +103,11 @@ impl Console {
 }
 
 impl Progress for Console {
-    fn begin(&self, label: &str, total: u64) {
+    fn begin(&self, phase: Phase, total: u64) {
         self.done.store(0, Ordering::Relaxed);
         let now = Instant::now();
         let mut p = self.phase.lock().unwrap();
-        *p = Phase { label: label.to_string(), total, started: now, drawn: now };
+        *p = Current { phase, total, started: now, drawn: now };
         self.draw(&p, false);
     }
 

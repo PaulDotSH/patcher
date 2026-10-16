@@ -17,7 +17,7 @@ use patcher_core::format::{
     WriteOp, FORMAT_VERSION, HEADER_LEN,
 };
 use patcher_core::hash::{self, Mapped};
-use patcher_core::progress::Progress;
+use patcher_core::progress::{Phase, Progress};
 use patcher_core::sys::{self, Budget};
 use rayon::prelude::*;
 use xxhash_rust::xxh3::{xxh3_128, xxh3_64};
@@ -163,7 +163,7 @@ pub fn plan(opts: &CreateOptions, progress: &dyn Progress) -> Result<Plan> {
     let modded = scan::scan(&opts.modded, &filter).context("scanning modded folder")?;
 
     let total: u64 = base.files.values().chain(modded.files.values()).map(|f| f.size).sum();
-    progress.begin("Hashing", total);
+    progress.begin(Phase::Hash, total);
     let hash_all = |t: &Tree| -> Result<HashMap<String, (u64, u128)>> {
         t.files
             .par_iter()
@@ -376,7 +376,7 @@ pub fn create(opts: &CreateOptions, output: &Path, progress: &dyn Progress) -> R
     let mut order: Vec<usize> = (0..plan.items.len()).filter(|&i| !matches!(plan.items[i].kind, Kind::Solid)).collect();
     order.sort_by_key(|&i| std::cmp::Reverse(plan.modded.files[&plan.items[i].path].size));
     let total: u64 = plan.items.iter().map(|i| plan.modded.files[&i.path].size).sum();
-    progress.begin("Encoding", total);
+    progress.begin(Phase::Encode, total);
 
     let encoded: Vec<(usize, WriteOp, FileReport)> = order
         .par_iter()
