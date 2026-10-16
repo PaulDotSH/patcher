@@ -63,6 +63,15 @@ enum Target {
     All,
 }
 
+#[derive(Clone, Copy, ValueEnum, Deserialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "lowercase")]
+enum Ui {
+    /// Installer window (default).
+    Gui,
+    /// Console patcher.
+    Cli,
+}
+
 #[derive(clap::Args)]
 struct CreateArgs {
     /// Unmodified game folder.
@@ -113,7 +122,16 @@ struct CreateArgs {
     /// Only write the .patch file.
     #[arg(long)]
     no_standalone: bool,
-    /// Folder with patcher-stub-windows.exe / patcher-stub-linux (when not embedded).
+    /// Patcher front end: an installer window or a console program.
+    #[arg(long, value_enum)]
+    ui: Option<Ui>,
+    /// Theme for the installer window (implies --ui gui); see docs/gui.md.
+    #[arg(long, value_name = "THEME.toml")]
+    gui: Option<PathBuf>,
+    /// Write the patchers without the patch inside; they read the .patch next to them.
+    #[arg(long, conflicts_with = "no_standalone")]
+    detached: bool,
+    /// Folder with prebuilt stubs (patcher-stub[-gui]-windows.exe, patcher-stub[-gui]-linux).
     #[arg(long)]
     stub_dir: Option<PathBuf>,
     /// Show what would change without encoding anything.
@@ -154,6 +172,9 @@ struct ConfigFile {
     exclude: Vec<String>,
     profile: Option<ProfileArg>,
     tolerance: Option<f64>,
+    ui: Option<Ui>,
+    /// Theme file, relative to this config file.
+    gui: Option<PathBuf>,
 }
 
 fn parse_size(s: &str) -> Result<u64, String> {
@@ -250,6 +271,20 @@ fn create(a: CreateArgs) -> Result<()> {
         return Ok(());
     }
 
+    let config_dir = a.config.as_deref().and_then(Path::parent).map(Path::to_path_buf).unwrap_or_default();
+    let theme_file = a.gui.clone().or_else(|| cfg.gui.as_ref().map(|g| config_dir.join(g)));
+    let ui = if theme_file.is_some() { Ui::Gui } else { a.ui.or(cfg.ui).unwrap_or(Ui::Gui) };
+    if theme_file.is_some() && a.ui.or(cfg.ui) == Some(Ui::Cli) {
+        bail!("--gui needs the GUI patcher; drop --ui cli");
+    }
+    // Checked before encoding, so a theme mistake does not cost a full patch build.
+    let (theme, bundle) = if ui == Ui::Gui && !a.no_standalone {
+        let (t, b) = prepare_gui(theme_file.as_deref())?;
+        (Some(t), b)
+    } else {
+        (None, None)
+    };
+
     std::fs::create_dir_all(&a.out_dir)?;
     let stem = file_stem(&opts.meta.name);
     let patch_path = a.out_dir.join(format!("{stem}.patch"));
@@ -267,25 +302,69 @@ fn create(a: CreateArgs) -> Result<()> {
             Target::Windows => &[Target::Windows],
             Target::Linux => &[Target::Linux],
         };
+        let embedded_patch = (!a.detached).then_some(patch_path.as_path());
         for &t in targets {
             let out = a.out_dir.join(match t {
                 Target::Windows => format!("{stem}-patcher.exe"),
                 _ => format!("{stem}-patcher"),
             });
-            match find_stub(t, a.stub_dir.as_deref()) {
-                Some(stub) => {
-                    patcher_create::write_standalone(&stub, None, Some(&patch_path), &out)?;
-                    println!("Wrote {} ({})", out.display(), human_bytes(std::fs::metadata(&out)?.len()));
+            let os = if t == Target::Windows { "Windows" } else { "Linux" };
+            let mut ui = ui;
+            let stub = match find_stub(t, ui, a.stub_dir.as_deref()) {
+                Some(s) => Some(s),
+                None if ui == Ui::Gui && t == Target::Linux => {
+                    eprintln!(
+                        "warning: no Linux GUI stub in this build (build the creator on Linux); the Linux patcher will be a console app"
+                    );
+                    ui = Ui::Cli;
+                    find_stub(t, Ui::Cli, a.stub_dir.as_deref())
                 }
-                None => eprintln!(
-                    "warning: no {} stub available; skipped {} (use --stub-dir or build with `cargo xtask dist`)",
-                    if t == Target::Windows { "Windows" } else { "Linux" },
+                None => None,
+            };
+            let Some(stub) = stub else {
+                eprintln!(
+                    "warning: no {os} {} stub available; skipped {} (use --stub-dir or build with `cargo xtask dist`)",
+                    if ui == Ui::Gui { "GUI" } else { "console" },
                     out.display()
-                ),
-            }
+                );
+                continue;
+            };
+            let stub = if t == Target::Windows {
+                let icon = theme.as_ref().and_then(|t| t.icon.clone()).filter(|p| {
+                    p.extension().is_some_and(|e| ["png", "jpg", "jpeg"].iter().any(|x| e.eq_ignore_ascii_case(x)))
+                });
+                match patcher_create::pe::brand_windows_stub(&stub, icon.as_deref(), &opts.meta) {
+                    Ok(b) => Cow::Owned(b),
+                    Err(e) => {
+                        eprintln!("warning: could not set the Windows icon and version info: {e:#}");
+                        stub
+                    }
+                }
+            } else {
+                stub
+            };
+            let bundle = if ui == Ui::Gui { bundle.as_deref() } else { None };
+            patcher_create::write_standalone(&stub, bundle, embedded_patch, &out)?;
+            println!("Wrote {} ({})", out.display(), human_bytes(std::fs::metadata(&out)?.len()));
         }
     }
     Ok(())
+}
+
+/// Loads, compiles and packs the theme for GUI patchers, so a broken theme fails here and
+/// never reaches players. Returns the theme (for the icon) and the bundle (if a theme file
+/// was given; without one the patcher uses the built-in look).
+fn prepare_gui(theme_file: Option<&Path>) -> Result<(patcher_gui::Theme, Option<Vec<u8>>)> {
+    let theme = match theme_file {
+        Some(p) => patcher_gui::Theme::load(p)?,
+        None => patcher_gui::Theme::builtin(),
+    };
+    let work = std::env::temp_dir().join(format!("patcher-theme-check-{}", std::process::id()));
+    let checked = patcher_gui::compile::compile(&theme, &work);
+    let _ = std::fs::remove_dir_all(&work);
+    checked.map_err(|e| anyhow::anyhow!("{e}"))?;
+    let bundle = theme_file.map(patcher_gui::bundle::pack).transpose()?;
+    Ok((theme, bundle))
 }
 
 fn file_stem(name: &str) -> String {
@@ -293,10 +372,12 @@ fn file_stem(name: &str) -> String {
     if s.is_empty() { "mod".into() } else { s }
 }
 
-fn find_stub(t: Target, dir: Option<&Path>) -> Option<Cow<'static, [u8]>> {
-    let (embedded, names): (_, &[&str]) = match t {
-        Target::Windows => (stubs::STUB_WINDOWS, &["patcher-stub-windows.exe"]),
-        _ => (stubs::STUB_LINUX, &["patcher-stub-linux"]),
+fn find_stub(t: Target, ui: Ui, dir: Option<&Path>) -> Option<Cow<'static, [u8]>> {
+    let (embedded, names): (_, &[&str]) = match (t, ui) {
+        (Target::Windows, Ui::Cli) => (stubs::STUB_WINDOWS, &["patcher-stub-windows.exe"]),
+        (Target::Windows, Ui::Gui) => (stubs::STUB_WINDOWS_GUI, &["patcher-stub-gui-windows.exe"]),
+        (_, Ui::Cli) => (stubs::STUB_LINUX, &["patcher-stub-linux"]),
+        (_, Ui::Gui) => (stubs::STUB_LINUX_GUI, &["patcher-stub-gui-linux"]),
     };
     if let Some(b) = embedded {
         return Some(Cow::Borrowed(b));
@@ -308,10 +389,13 @@ fn find_stub(t: Target, dir: Option<&Path>) -> Option<Cow<'static, [u8]>> {
     }
     // Development builds: stubs built into the same cargo target directory.
     let profile = exe_dir.file_name().map(|p| p.to_os_string()).unwrap_or_default();
+    let bin = if ui == Ui::Gui { "patcher-stub-gui" } else { "patcher-stub" };
     match t {
-        Target::Windows if cfg!(windows) => cands.push(exe_dir.join("patcher-stub.exe")),
-        Target::Windows => cands.push(exe_dir.join("../x86_64-pc-windows-msvc").join(&profile).join("patcher-stub.exe")),
-        _ => cands.push(exe_dir.join("../x86_64-unknown-linux-musl").join(&profile).join("patcher-stub")),
+        Target::Windows if cfg!(windows) => cands.push(exe_dir.join(format!("{bin}.exe"))),
+        Target::Windows => cands.push(exe_dir.join("../x86_64-pc-windows-gnu").join(&profile).join(format!("{bin}.exe"))),
+        _ if ui == Ui::Gui && cfg!(target_os = "linux") => cands.push(exe_dir.join(bin)),
+        _ if ui == Ui::Gui => {}
+        _ => cands.push(exe_dir.join("../x86_64-unknown-linux-musl").join(&profile).join(bin)),
     }
     cands.into_iter().find_map(|p| std::fs::read(p).ok()).map(Cow::Owned)
 }

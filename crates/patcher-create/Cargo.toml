@@ -9,7 +9,11 @@ anyhow = "1.0.104"
 bitcode.workspace = true
 blake3.workspace = true
 divsufsort = "2.0.0"
+editpe = "0.2.4"
+foldhash = "0.2"
 ignore = "0.4.33"
+image = { version = "0.25.2", default-features = false, features = ["png", "jpeg", "ico"] }
+indexmap = "2.6"
 lzma-rust2 = { workspace = true, default-features = false, features = ["std", "encoder", "optimization"] }
 memmap2.workspace = true
 patcher-core.workspace = true

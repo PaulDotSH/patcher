@@ -2,6 +2,7 @@
 
 pub mod bsdiff;
 pub mod encode;
+pub mod pe;
 pub mod scan;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
