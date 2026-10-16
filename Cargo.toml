@@ -23,6 +23,8 @@ ruzstd = { path = "vendor/ruzstd" }
 [workspace.dependencies]
 patcher-core = { path = "crates/patcher-core" }
 patcher-create = { path = "crates/patcher-create" }
+patcher-gui = { path = "crates/patcher-gui" }
+patcher-stub = { path = "crates/patcher-stub" }
 patcher-testgen = { path = "crates/patcher-testgen" }
 bitcode = "0.6"
 blake3 = { version = "1.8", features = ["pure", "rayon"] }

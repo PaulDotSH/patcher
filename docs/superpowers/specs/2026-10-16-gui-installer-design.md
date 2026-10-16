@@ -88,20 +88,19 @@ The `.patch` format itself is unchanged.
 
 ### UI bundle
 
-A zstd frame holding a bitcode-encoded `UiBundle`:
+`"PUI1"`, the decoded length (u64), then a zstd frame holding a bitcode-encoded
+`Bundle { theme: String, files: Vec<(String, Vec<u8>)> }`.
 
-```rust
-struct UiBundle {
-    version: u32,                    // 1
-    files: Vec<(String, Vec<u8>)>,   // bundle-relative path -> bytes
-}
-```
+The bundle is the theme's whole folder (hidden files excepted), so relative `.slint`
+imports and `@image-url` paths resolve after extraction exactly as in the author's folder.
+Everything the TOML references must be inside that folder. `theme` names the TOML file.
+The stub runs the same `Theme::load` on the extracted folder as the creator does, and
+reads font family names with `ttf-parser` at both ends, so nothing is rewritten when
+packing.
 
 Paths obey the same rules as patch paths (relative, `/`, no `..`), checked with
-`paths::validate`. `theme.toml` at the root is the normalised theme: every asset path is
-rewritten to its bundle path, and font family names are filled in (read from the TTFs
-with `ttf-parser` at create time). Limits: 64 MiB decoded and 1024 files, checked before
-decoding.
+`validate_rel_path`. Limits: 64 MiB of file data and 1024 files, checked when packing
+and again before and after decoding.
 
 ## Theme file
 

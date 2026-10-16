@@ -1,0 +1,22 @@
+[package]
+name = "patcher-gui"
+description = "Installer-style GUI for standalone patchers: themes, UI bundles and the Slint runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# Packing UI bundles needs a zstd encoder; only the creator enables it.
+pack = ["dep:zstd"]
+
+[dependencies]
+bitcode.workspace = true
+patcher-core.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror.workspace = true
+toml = "1.1.8"
+ttf-parser = "0.25.1"
+xxhash-rust.workspace = true
+zstd = { version = "0.14.2", optional = true }
+
+[dev-dependencies]
